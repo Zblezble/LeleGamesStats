@@ -10,9 +10,22 @@ from discord.ext import commands
 # Set these as environment variables before running:
 #   DISCORD_BOT_TOKEN - your Discord bot token (required)
 #   SCORE_CHANNEL_ID  - the channel to watch (optional; if unset, watches all channels)
+#   BOT_TZ            - timezone for daily board cutoff, e.g. "Europe/Warsaw"
+#                     (optional; defaults to the server's local time)
 BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
 SCORE_CHANNEL_ID = int(os.getenv("SCORE_CHANNEL_ID", "0")) or None
 DB_PATH = "scores.db"
+
+try:
+    from zoneinfo import ZoneInfo
+    BOT_TZ = ZoneInfo(os.environ["BOT_TZ"]) if os.getenv("BOT_TZ") else None
+except Exception:
+    BOT_TZ = None  # unknown/missing tz database: fall back to server-local time
+
+
+def today_str() -> str:
+    now = datetime.now(BOT_TZ) if BOT_TZ else datetime.now()
+    return now.strftime("%Y-%m-%d")
 
 # Emoji icons & Display ordering for games
 GAME_META = {
@@ -109,12 +122,6 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 3. REDACTLE (Redactle #1670)
-    for m in re.finditer(
-        r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guesses![^\n]*\n([^\n]+)",
-        text
-    ):
-        pass
-    # More flexible Redactle matcher (handles both '.' and '!')
     for m in re.finditer(
         r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guesses[.!]\s*\n([^\n]+)",
         text
@@ -356,6 +363,7 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
 
     # Calculate Overall Daily MVP Points (1st = 3pts, 2nd = 2pts, 3rd = 1pt in games with >=2 players)
     mvp_points = {}
+    names = {}  # uid -> display_name (points keyed by uid so same-named players don't merge)
 
     for (game, pid), entries in grouped.items():
         icon = get_game_icon(game)
@@ -365,24 +373,27 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
 
         for uid, uname, solved, rscore, dscore, url in entries:
             if solved:
+                names[uid] = uname
                 rank_idx = unique_scores.index(rscore)
                 if len(entries) >= 2 and rank_idx < 3:
                     pts = 3 - rank_idx
-                    mvp_points[uname] = mvp_points.get(uname, 0) + pts
+                    mvp_points[uid] = mvp_points.get(uid, 0) + pts
 
             duel_str = f" · [rematch]({url})" if url else ""
             lines.append(f"**{uname}** `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
+        # Clamp to Discord's 1024-char field limit so a huge game can't kill the whole board
+        clamp = lambda v: v if len(v) <= 1024 else v[:1021] + "…"
         if layout == "rows":
-            embed.add_field(name=field_title, value=" · ".join(lines), inline=False)
+            embed.add_field(name=field_title, value=clamp(" · ".join(lines)), inline=False)
         else:
-            embed.add_field(name=field_title, value="\n".join(lines), inline=True)
+            embed.add_field(name=field_title, value=clamp("\n".join(lines)), inline=True)
 
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
         standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
-        standings_str = " · ".join([f"**{u}** {p}" for u, p in standings])
+        standings_str = " · ".join([f"**{names[u]}** {p}" for u, p in standings])
         embed.add_field(name="Today's points (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt)", value=standings_str, inline=False)
 
     return embed
@@ -411,8 +422,15 @@ async def update_or_post_daily_board(channel: discord.TextChannel, board_date: s
                 return
             except discord.NotFound:
                 pass  # Message was manually deleted, fall through to create a new one
+            except discord.HTTPException as e:
+                print(f"Warning: failed to edit board message: {e}")
+                return
 
-        new_msg = await channel.send(embed=embed)
+        try:
+            new_msg = await channel.send(embed=embed)
+        except discord.HTTPException as e:
+            print(f"Warning: failed to post board message: {e}")
+            return
         c.execute(
             "INSERT OR REPLACE INTO daily_boards (board_date, channel_id, message_id) VALUES (?, ?, ?)",
             (board_date, channel.id, new_msg.id)
@@ -428,8 +446,10 @@ async def on_ready():
 
 @bot.event
 async def on_message(message: discord.Message):
-    # Ignore our own messages, other bots (like the official Wordle Activity app), or other channels
+    # Ignore our own messages, other bots (like the official Wordle Activity app), DMs, or other channels
     if message.author.bot:
+        return
+    if message.guild is None:
         return
     if SCORE_CHANNEL_ID and message.channel.id != SCORE_CHANNEL_ID:
         return
@@ -440,7 +460,7 @@ async def on_message(message: discord.Message):
         await bot.process_commands(message)
         return
 
-    board_date = datetime.now().strftime("%Y-%m-%d")
+    board_date = today_str()
     user_id = message.author.id
     user_name = message.author.display_name
 
@@ -576,7 +596,7 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
 
 @bot.tree.command(name="repost_board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")
 async def repost_board(interaction: discord.Interaction):
-    board_date = datetime.now().strftime("%Y-%m-%d")
+    board_date = today_str()
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
         c.execute("SELECT message_id FROM daily_boards WHERE board_date = ?", (board_date,))
@@ -609,7 +629,7 @@ async def layout_switch(interaction: discord.Interaction):
         )
         conn.commit()
 
-    board_date = datetime.now().strftime("%Y-%m-%d")
+    board_date = today_str()
     await update_or_post_daily_board(interaction.channel, board_date)
 
     if new_layout == "rows":
