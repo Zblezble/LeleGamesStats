@@ -27,25 +27,30 @@ def today_str() -> str:
     now = datetime.now(BOT_TZ) if BOT_TZ else datetime.now()
     return now.strftime("%Y-%m-%d")
 
-# Emoji icons & Display ordering for games
+# Game registry: icon + short description + link. Base names are matched by prefix,
+# so modes like "Roughly (Where from)" and "Magnitudle (Size It Up)" resolve too.
 GAME_META = {
-    "Metazooa": {"icon": "🐾", "unit": "guesses"},
-    "Flagle": {"icon": "🚩", "unit": "tries"},
-    "Worldle": {"icon": "🗺️", "unit": "tries"},
-    "Globle": {"icon": "🌎", "unit": "guesses"},
-    "Travle": {"icon": "✈️", "unit": "extra"},
-    "Centumth": {"icon": "💯", "unit": "pts"},
-    "Redactle": {"icon": "████", "unit": "guesses"},
-    "Songless": {"icon": "🎵", "unit": "solved"},
-    "Wordle": {"icon": "🟩", "unit": "tries"},
+    "Wordle": {"icon": "🟩", "desc": "daily 5-letter word, 6 tries", "url": "https://www.nytimes.com/games/wordle"},
+    "Worldle": {"icon": "🗺️", "desc": "guess the country from its outline", "url": "https://worldle.teuteuf.net"},
+    "Flagle": {"icon": "🚩", "desc": "guess the country's flag in 6 tries", "url": "https://www.flagle.net"},
+    "Globle": {"icon": "🌎", "desc": "hot/cold country guessing", "url": "https://globle-game.com"},
+    "Travle": {"icon": "✈️", "desc": "connect two countries across borders", "url": "https://www.travle.net"},
+    "Metazooa": {"icon": "🐾", "desc": "guess the animal from its taxonomy", "url": "https://metazooa.com"},
+    "Redactle": {"icon": "████", "desc": "unredact the hidden Wikipedia article", "url": "https://redactle.net"},
+    "Songless": {"icon": "🎵", "desc": "guess songs from short clips, per genre", "url": "https://songless.app"},
+    "Centumth": {"icon": "💯", "desc": "100-question daily knowledge quiz", "url": "https://centumth.com"},
+    "Roughly": {"icon": "📏", "desc": "daily estimation duels", "url": "https://roughly.is"},
+    "Magnitudle": {"icon": "📐", "desc": "size-it-up estimation rounds", "url": "https://magnitudle.com"},
 }
 
+def get_game_meta(game_name: str) -> dict:
+    for key, meta in GAME_META.items():
+        if game_name.startswith(key):
+            return meta
+    return {"icon": "🧩", "desc": "", "url": ""}
+
 def get_game_icon(game_name: str) -> str:
-    if game_name.startswith("Roughly"):
-        return "📏"
-    if game_name.startswith("Magnitudle"):
-        return "📐"
-    return GAME_META.get(game_name, {}).get("icon", "🧩")
+    return get_game_meta(game_name)["icon"]
 
 
 # ================= DATABASE SETUP =================
@@ -637,6 +642,21 @@ async def repost_board(interaction: discord.Interaction):
 
     await update_or_post_daily_board(interaction.channel, board_date)
     await interaction.response.send_message("Board reposted at the bottom of the channel.", ephemeral=True)
+
+
+@bot.tree.command(name="games", description="List supported games with descriptions and links")
+async def games(interaction: discord.Interaction):
+    lines = []
+    for name, meta in GAME_META.items():
+        lines.append(f"{meta['icon']} **{name}** — {meta['desc']} · [play]({meta['url']})")
+
+    embed = discord.Embed(
+        title="Supported games",
+        description="Paste a result in this channel and it lands on the daily board.",
+        color=0x64748B
+    )
+    embed.add_field(name=f"{len(GAME_META)} games", value="\n".join(lines), inline=False)
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")

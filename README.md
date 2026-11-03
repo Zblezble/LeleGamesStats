@@ -13,6 +13,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
   - `/stats [player]` — all-time games played, solve rate, golds 🥇 (competitive wins).
   - `/repost_board` — re-posts today's board at the bottom of the channel.
   - `/layout_switch` — toggles the channel's board between compact (three games per row) and wide (one line per game).
+  - `/games` — lists supported games with short descriptions and links.
 
 ## Setup
 
