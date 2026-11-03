@@ -375,8 +375,8 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
         date_label = board_date
 
     embed = discord.Embed(
-        title=f"🌅 Daily digest — {date_label}",
-        description="Drop your raw game results in this channel — they get logged here and tidied away.",
+        title=f"🌅 Daily digest · {date_label}",
+        description="Drop your raw game results in this channel. They get logged here and tidied away.",
         color=0xF59E0B,
         timestamp=datetime.now(timezone.utc)
     )
@@ -648,7 +648,7 @@ async def repost_board(interaction: discord.Interaction):
 async def games(interaction: discord.Interaction):
     lines = []
     for name, meta in GAME_META.items():
-        lines.append(f"{meta['icon']} **{name}** — {meta['desc']} · [play]({meta['url']})")
+        lines.append(f"{meta['icon']} **{name}** · {meta['desc']} · [play]({meta['url']})")
 
     embed = discord.Embed(
         title="Supported games",
@@ -678,9 +678,9 @@ async def layout_switch(interaction: discord.Interaction):
     await update_or_post_daily_board(interaction.channel, board_date)
 
     if new_layout == "rows":
-        await interaction.response.send_message("Board layout: wide — one line per game.", ephemeral=True)
+        await interaction.response.send_message("Board layout: wide · one line per game.", ephemeral=True)
     else:
-        await interaction.response.send_message("Board layout: compact — three games per row.", ephemeral=True)
+        await interaction.response.send_message("Board layout: compact · three games per row.", ephemeral=True)
 
 
 if __name__ == "__main__":
