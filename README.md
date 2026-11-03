@@ -37,7 +37,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 4. Run:
 
    ```bash
-   python bot.py
+   python main.py
    ```
 
    Scores are stored in a local `scores.db` SQLite file (created automatically).
