@@ -17,7 +17,7 @@ DB_PATH = "scores.db"
 # Emoji icons & Display ordering for games
 GAME_META = {
     "Metazooa": {"icon": "🐾", "unit": "guesses"},
-    "Flagle": {"icon": "🏳️", "unit": "tries"},
+    "Flagle": {"icon": "🚩", "unit": "tries"},
     "Worldle": {"icon": "🗺️", "unit": "tries"},
     "Globle": {"icon": "🌎", "unit": "guesses"},
     "Travle": {"icon": "✈️", "unit": "extra"},
@@ -30,7 +30,7 @@ GAME_META = {
 def get_game_icon(game_name: str) -> str:
     if game_name.startswith("Roughly"):
         return "📏"
-    return GAME_META.get(game_name, {}).get("icon", "🎮")
+    return GAME_META.get(game_name, {}).get("icon", "🧩")
 
 
 # ================= DATABASE SETUP =================
@@ -83,7 +83,7 @@ def parse_all_games(text: str) -> list[dict]:
             "puzzle_id": f"#{pid}",
             "solved": solved,
             "rank_score": float(g_val),
-            "display_score": f"{g_val} guesses" if solved else "❌ DNF",
+            "display_score": f"{g_val} guesses" if solved else "DNF",
             "extra_url": None
         })
 
@@ -138,7 +138,7 @@ def parse_all_games(text: str) -> list[dict]:
             "puzzle_id": f"#{pid}",
             "solved": solved,
             "rank_score": rank_score,
-            "display_score": f"{guesses}g{h_disp}{t_disp}" if solved else f"❌ DNF ({guesses}g)",
+            "display_score": f"{guesses}g{h_disp}{t_disp}" if solved else f"DNF ({guesses}g)",
             "extra_url": None
         })
 
@@ -325,15 +325,21 @@ def build_daily_embed(board_date: str) -> discord.Embed:
         """, (board_date,))
         rows = c.fetchall()
 
+    try:
+        dt = datetime.strptime(board_date, "%Y-%m-%d")
+        date_label = f"{dt.strftime('%a')} {dt.day} {dt.strftime('%b')}"
+    except ValueError:
+        date_label = board_date
+
     embed = discord.Embed(
-        title=f"🏆 Daily Games Digest — {board_date}",
-        description="Paste your raw game results straight into this channel. I will log them here and auto-delete the clutter!",
-        color=0x2ECC71,
+        title=f"🌅 Daily digest — {date_label}",
+        description="Drop your raw game results in this channel — they get logged here and tidied away.",
+        color=0xF59E0B,
         timestamp=datetime.now(timezone.utc)
     )
 
     if not rows:
-        embed.add_field(name="No scores yet today", value="Be the first to drop a score!", inline=False)
+        embed.add_field(name="No scores yet", value="Post a result to start the board.", inline=False)
         return embed
 
     # Group by (game, puzzle_id)
@@ -344,7 +350,7 @@ def build_daily_embed(board_date: str) -> discord.Embed:
 
     # Calculate Overall Daily MVP Points (1st = 3pts, 2nd = 2pts, 3rd = 1pt in games with >=2 players)
     mvp_points = {}
-    medals = ["👑", "🥈", "🥉"]
+    medals = ["🥇", "🥈", "🥉"]
 
     for (game, pid), entries in grouped.items():
         icon = get_game_icon(game)
@@ -354,7 +360,7 @@ def build_daily_embed(board_date: str) -> discord.Embed:
 
         for uid, uname, solved, rscore, dscore, url in entries:
             if not solved:
-                prefix = "💀"
+                prefix = "`dnf`"
             else:
                 rank_idx = unique_scores.index(rscore)
                 prefix = medals[rank_idx] if rank_idx < 3 else f"`#{rank_idx+1}`"
@@ -362,8 +368,8 @@ def build_daily_embed(board_date: str) -> discord.Embed:
                     pts = 3 - rank_idx
                     mvp_points[uname] = mvp_points.get(uname, 0) + pts
 
-            duel_str = f" · [⚔️ Duel]({url})" if url else ""
-            lines.append(f"{prefix} **{uname}**: `{dscore}`{duel_str}")
+            duel_str = f" · [rematch]({url})" if url else ""
+            lines.append(f"{prefix} **{uname}** `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
         embed.add_field(name=field_title, value="\n".join(lines), inline=True)
@@ -371,8 +377,8 @@ def build_daily_embed(board_date: str) -> discord.Embed:
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
         standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
-        standings_str = " · ".join([f"**{u}** ({p} pts)" for u, p in standings])
-        embed.add_field(name="🔥 Today's Podium Points (👑=3, 🥈=2, 🥉=1)", value=standings_str, inline=False)
+        standings_str = " · ".join([f"**{u}** {p}" for u, p in standings])
+        embed.add_field(name="Today's points (🥇 3 · 🥈 2 · 🥉 1)", value=standings_str, inline=False)
 
     return embed
 
@@ -475,7 +481,7 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
 
     if not matchups:
         await interaction.response.send_message(
-            f"No shared puzzles found between **{p1.display_name}** and **{p2.display_name}** yet!",
+            f"No shared puzzles found between **{p1.display_name}** and **{p2.display_name}** yet.",
             ephemeral=True
         )
         return
@@ -495,16 +501,16 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
             tot_w2 += 1
 
     embed = discord.Embed(
-        title=f"⚔️ Head-to-Head: {p1.display_name} vs. {p2.display_name}",
-        description=f"**Overall Record:** `{tot_w1}` — `{tot_w2}` *(Ties: {tot_ties})*",
-        color=0xE67E22
+        title=f"Head-to-head: {p1.display_name} vs {p2.display_name}",
+        description=f"**{tot_w1}–{tot_w2}** overall · {tot_ties} tied",
+        color=0x64748B
     )
     lines = []
     for game, (w1, w2, t) in sorted(stats.items()):
         icon = get_game_icon(game)
-        lines.append(f"{icon} **{game}**: `{w1}` - `{w2}` (Ties: {t})")
+        lines.append(f"{icon} **{game}** · {w1}–{w2} · {t} tied")
 
-    embed.add_field(name="Breakdown by Game", value="\n".join(lines), inline=False)
+    embed.add_field(name="By game", value="\n".join(lines), inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -536,24 +542,24 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
                     rec[2] += 1
 
     if not game_totals:
-        await interaction.response.send_message(f"No stats recorded for **{target.display_name}** yet!", ephemeral=True)
+        await interaction.response.send_message(f"No games logged for **{target.display_name}** yet.", ephemeral=True)
         return
 
     total_played = sum(v[0] for v in game_totals.values())
     total_crowns = sum(v[2] for v in game_totals.values())
 
     embed = discord.Embed(
-        title=f"📊 Player Profile — {target.display_name}",
-        description=f"**Total Games Logged:** `{total_played}` | **Multiplayer Crowns 👑:** `{total_crowns}`",
-        color=0x3498DB
+        title=f"All-time stats: {target.display_name}",
+        description=f"**{total_played}** games logged · **{total_crowns}** 🥇 golds",
+        color=0x64748B
     )
     lines = []
     for game, (played, solved, crowns) in sorted(game_totals.items()):
         icon = get_game_icon(game)
         win_rate = int((solved / played) * 100) if played else 0
-        lines.append(f"{icon} **{game}**: `{played}` played · `{crowns}` 👑 · `{win_rate}%` solved")
+        lines.append(f"{icon} **{game}** · {played} played · {win_rate}% solved · {crowns} 🥇")
 
-    embed.add_field(name="Per-Game Performance", value="\n".join(lines), inline=False)
+    embed.add_field(name="By game", value="\n".join(lines), inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -574,7 +580,7 @@ async def repost_board(interaction: discord.Interaction):
         conn.commit()
 
     await update_or_post_daily_board(interaction.channel, board_date)
-    await interaction.response.send_message("Board moved to the bottom of the channel!", ephemeral=True)
+    await interaction.response.send_message("Board reposted at the bottom of the channel.", ephemeral=True)
 
 
 if __name__ == "__main__":
