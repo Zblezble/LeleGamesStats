@@ -43,6 +43,8 @@ GAME_META = {
 def get_game_icon(game_name: str) -> str:
     if game_name.startswith("Roughly"):
         return "📏"
+    if game_name.startswith("Magnitudle"):
+        return "📐"
     return GAME_META.get(game_name, {}).get("icon", "🧩")
 
 
@@ -310,6 +312,22 @@ def parse_all_games(text: str) -> list[dict]:
             "solved": solved,
             "rank_score": float(tries),
             "display_score": f"{score_ch}/6",
+            "extra_url": None
+        })
+
+    # 11. MAGNITUDLE (Magnitudle — Size It Up \n 2026-11-03 \n Score: 199/500 + grid rows)
+    for m in re.finditer(
+        r"Magnitudle\s*[—–-]\s*([^\n]+)\n(\d{4}-\d{2}-\d{2})\s*\n+\s*Score:\s*(\d+)/500",
+        text
+    ):
+        submode = m.group(1).strip()
+        date_str, pts = m.group(2), int(m.group(3))
+        results.append({
+            "game": f"Magnitudle ({submode})",
+            "puzzle_id": date_str,
+            "solved": 1 if pts > 0 else 0,
+            "rank_score": float(-pts),  # Higher points = lower rank_score
+            "display_score": f"{pts}/500",
             "extra_url": None
         })
 
