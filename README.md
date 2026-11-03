@@ -7,7 +7,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 - Watches a designated channel for raw game result pastes.
 - Parses results for: **Wordle, Worldle, Flagle, Globle, Travle, Metazooa, Redactle, Songless, Centumth, Roughly** (lower rank score always wins; points games like Centumth store negated scores).
 - Deletes the raw paste and updates **one consolidated daily leaderboard embed** per day (per-day boards are tracked in SQLite and edited in place).
-- Awards daily points per game (🥇 3 · 🥈 2 · 🥉 1, ties share placement; games with ≥2 players) plus a standings summary on the board.
+- Awards daily points per game (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt, ties share placement; games with ≥2 players) plus a standings summary on the board.
 - Slash commands:
   - `/h2h <opponent> [player1]` — head-to-head record across all shared puzzles.
   - `/stats [player]` — all-time games played, solve rate, golds 🥇 (competitive wins).

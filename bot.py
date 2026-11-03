@@ -350,7 +350,6 @@ def build_daily_embed(board_date: str) -> discord.Embed:
 
     # Calculate Overall Daily MVP Points (1st = 3pts, 2nd = 2pts, 3rd = 1pt in games with >=2 players)
     mvp_points = {}
-    medals = ["🥇", "🥈", "🥉"]
 
     for (game, pid), entries in grouped.items():
         icon = get_game_icon(game)
@@ -359,17 +358,14 @@ def build_daily_embed(board_date: str) -> discord.Embed:
         unique_scores = sorted(list({e[3] for e in entries if e[2] == 1}))
 
         for uid, uname, solved, rscore, dscore, url in entries:
-            if not solved:
-                prefix = "`dnf`"
-            else:
+            if solved:
                 rank_idx = unique_scores.index(rscore)
-                prefix = medals[rank_idx] if rank_idx < 3 else f"`#{rank_idx+1}`"
                 if len(entries) >= 2 and rank_idx < 3:
                     pts = 3 - rank_idx
                     mvp_points[uname] = mvp_points.get(uname, 0) + pts
 
             duel_str = f" · [rematch]({url})" if url else ""
-            lines.append(f"{prefix} **{uname}** `{dscore}`{duel_str}")
+            lines.append(f"**{uname}** `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
         embed.add_field(name=field_title, value="\n".join(lines), inline=True)
@@ -378,7 +374,7 @@ def build_daily_embed(board_date: str) -> discord.Embed:
     if mvp_points:
         standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
         standings_str = " · ".join([f"**{u}** {p}" for u, p in standings])
-        embed.add_field(name="Today's points (🥇 3 · 🥈 2 · 🥉 1)", value=standings_str, inline=False)
+        embed.add_field(name="Today's points (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt)", value=standings_str, inline=False)
 
     return embed
 
