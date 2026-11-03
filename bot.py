@@ -60,6 +60,12 @@ def init_db():
                 message_id INTEGER
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS channel_settings (
+                channel_id INTEGER PRIMARY KEY,
+                layout TEXT NOT NULL DEFAULT 'grid'
+            )
+        """)
         conn.commit()
 
 
@@ -313,7 +319,7 @@ class DailyScoreBot(commands.Bot):
 bot = DailyScoreBot()
 
 
-def build_daily_embed(board_date: str) -> discord.Embed:
+def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     """Constructs the single consolidated Daily Leaderboard Embed for a given date."""
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
@@ -368,7 +374,10 @@ def build_daily_embed(board_date: str) -> discord.Embed:
             lines.append(f"**{uname}** `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
-        embed.add_field(name=field_title, value="\n".join(lines), inline=True)
+        if layout == "rows":
+            embed.add_field(name=field_title, value=" · ".join(lines), inline=False)
+        else:
+            embed.add_field(name=field_title, value="\n".join(lines), inline=True)
 
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
@@ -381,7 +390,13 @@ def build_daily_embed(board_date: str) -> discord.Embed:
 
 async def update_or_post_daily_board(channel: discord.TextChannel, board_date: str):
     """Edits today's existing summary Embed, or posts a new one if none exists yet."""
-    embed = build_daily_embed(board_date)
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT layout FROM channel_settings WHERE channel_id = ?", (channel.id,))
+        layout_row = c.fetchone()
+        layout = layout_row[0] if layout_row else "grid"
+
+    embed = build_daily_embed(board_date, layout)
 
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
@@ -577,6 +592,30 @@ async def repost_board(interaction: discord.Interaction):
 
     await update_or_post_daily_board(interaction.channel, board_date)
     await interaction.response.send_message("Board reposted at the bottom of the channel.", ephemeral=True)
+
+
+@bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")
+async def layout_switch(interaction: discord.Interaction):
+    channel_id = interaction.channel.id
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT layout FROM channel_settings WHERE channel_id = ?", (channel_id,))
+        row = c.fetchone()
+        current = row[0] if row else "grid"
+        new_layout = "rows" if current == "grid" else "grid"
+        c.execute(
+            "INSERT OR REPLACE INTO channel_settings (channel_id, layout) VALUES (?, ?)",
+            (channel_id, new_layout)
+        )
+        conn.commit()
+
+    board_date = datetime.now().strftime("%Y-%m-%d")
+    await update_or_post_daily_board(interaction.channel, board_date)
+
+    if new_layout == "rows":
+        await interaction.response.send_message("Board layout: wide — one line per game.", ephemeral=True)
+    else:
+        await interaction.response.send_message("Board layout: compact — three games per row.", ephemeral=True)
 
 
 if __name__ == "__main__":
