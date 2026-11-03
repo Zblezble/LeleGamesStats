@@ -121,24 +121,31 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
-    # 3. REDACTLE (Redactle #1670)
+    # 3. REDACTLE (Redactle #1670 — stats may be on the same line or the next one)
     for m in re.finditer(
-        r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guesses[.!]\s*\n([^\n]+)",
+        r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guesses[.!]([^\n]*)(?:\n([^\n]+))?",
         text
     ):
-        status, pid, guesses, stats_line = m.group(1), m.group(2), int(m.group(3)), m.group(4)
+        status, pid, guesses = m.group(1), m.group(2), int(m.group(3))
+        stats_line = m.group(4) or m.group(5) or ""
         solved = 1 if status == "cracked" else 0
-        # Parse hints: "Hints👆1, 💬0" or "Hints: none"
+        # Parse hints: "Hints👆1, 💬0", "Hints: 2" or "Hints: none"
         h_match = re.search(r"Hints👆(\d+),\s*💬(\d+)", stats_line)
-        hints = (int(h_match.group(1)) + int(h_match.group(2))) if h_match else 0
-        # Parse time: "⏱️ 6m16s"
-        t_match = re.search(r"⏱️\s*(?:(\d+)h)?(?:(\d+)m)?(\d+)s", stats_line)
+        h2_match = re.search(r"Hints:\s*(\d+)", stats_line)
+        if h_match:
+            hints = int(h_match.group(1)) + int(h_match.group(2))
+        elif h2_match:
+            hints = int(h2_match.group(1))
+        else:
+            hints = 0
+        # Parse time: "⏱️ 6m16s" (emoji with or without variation selector)
+        t_match = re.search(r"⏱️?\s*(?:(\d+)h)?(?:(\d+)m)?(\d+)s", stats_line)
         secs = 0
         if t_match:
             secs = (int(t_match.group(1) or 0) * 3600 +
                     int(t_match.group(2) or 0) * 60 +
                     int(t_match.group(3) or 0))
-        time_str = re.search(r"⏱️\s*([0-9hms]+)", stats_line)
+        time_str = re.search(r"⏱️?\s*([0-9hms]+)", stats_line)
         t_disp = f" ({time_str.group(1)})" if time_str else ""
         h_disp = f", {hints}h" if hints > 0 else ""
 
