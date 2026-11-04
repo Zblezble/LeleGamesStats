@@ -31,10 +31,10 @@ def today_str() -> str:
 # so modes like "Roughly (Where from)" and "Magnitudle (Size It Up)" resolve too.
 GAME_META = {
     "Wordle": {"icon": "🟩", "desc": "daily 5-letter word, 6 tries", "url": "https://www.nytimes.com/games/wordle"},
-    "Worldle": {"icon": "🗺️", "desc": "guess the country from its outline", "url": "https://worldle.teuteuf.net"},
-    "Flagle": {"icon": "🚩", "desc": "guess the country's flag in 6 tries", "url": "https://www.flagle.net"},
+    "Worldle": {"icon": "🗺️", "desc": "guess the country from its outline", "url": "https://worldle.teuteuf.fr"},
+    "Flagle": {"icon": "🚩", "desc": "guess the country's flag in 6 tries", "url": "https://www.flagle.io/"},
     "Globle": {"icon": "🌎", "desc": "hot/cold country guessing", "url": "https://globle-game.com"},
-    "Travle": {"icon": "✈️", "desc": "connect two countries across borders", "url": "https://www.travle.net"},
+    "Travle": {"icon": "✈️", "desc": "connect two countries across borders", "url": "https://travle.earth/"},
     "Metazooa": {"icon": "🐾", "desc": "guess the animal from its taxonomy", "url": "https://metazooa.com"},
     "Redactle": {"icon": "████", "desc": "unredact the hidden Wikipedia article", "url": "https://redactle.net"},
     "Songless": {"icon": "🎵", "desc": "guess songs from short clips, per genre", "url": "https://songless.app"},
