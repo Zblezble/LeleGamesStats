@@ -4,6 +4,7 @@ import sqlite3
 import discord
 
 import config
+import db
 import embeds
 import handlers
 from config import today_str
@@ -130,6 +131,22 @@ async def missing(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embeds.build_missing_embed(interaction.user.id), ephemeral=True)
 
 
+async def undo(interaction: discord.Interaction):
+    """Remove the scores from the caller's most recent ingest of the day."""
+    result = db.undo_latest_ingest(today_str(), interaction.user.id)
+    if result is None:
+        await interaction.response.send_message(
+            "Nothing to undo — only today's posts can be undone.", ephemeral=True
+        )
+        return
+    summary, deleted = result
+    await handlers.update_or_post_daily_board(interaction.channel, today_str())
+    await interaction.response.send_message(
+        f"Undid your latest ingest · removed {deleted} entr{'y' if deleted == 1 else 'ies'}: {summary}",
+        ephemeral=True
+    )
+
+
 async def games(interaction: discord.Interaction):
     lines = []
     for name, meta in ACTIVE_GAME_META.items():
@@ -171,5 +188,6 @@ def register(bot):
     bot.tree.command(name="stats", description="View all-time crowns, podiums, and win rates")(stats)
     bot.tree.command(name="board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")(board)
     bot.tree.command(name="missing", description="Which of today's games you still have to play")(missing)
+    bot.tree.command(name="undo", description="Remove the scores from your most recent post today")(undo)
     bot.tree.command(name="games", description="List supported games with descriptions and links")(games)
     bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")(layout_switch)

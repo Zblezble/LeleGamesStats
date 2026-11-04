@@ -16,6 +16,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
   - `/layout_switch` — toggles the channel's board between compact (three games per row) and wide (one line per game).
   - `/games` — lists supported games with short descriptions and links (private reply).
   - `/missing` — private (ephemeral) checklist: your games still to play today, with links.
+  - `/undo` — removes the scores from your most recent post today (self-serve, ephemeral reply).
 
 ## Setup
 

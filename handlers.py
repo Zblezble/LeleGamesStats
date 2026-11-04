@@ -102,23 +102,24 @@ def register(bot):
         if len(parsed_games) > 3:
             summary = ", ".join(f"{games.get_game_icon(g['game'])} {g['game']}" for g in parsed_games[:3]) \
                       + f" +{len(parsed_games) - 3} more"
-        db.log_ingest(board_date, user_id, user_name, message.content, summary, "ok")
+        ingest_id = db.log_ingest(board_date, user_id, user_name, message.content, summary, "ok")
 
         with sqlite3.connect(config.DB_PATH) as conn:
             c = conn.cursor()
             for g in parsed_games:
                 c.execute("""
-                    INSERT INTO scores (board_date, user_id, user_name, game, puzzle_id, solved, rank_score, display_score, extra_url)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO scores (board_date, user_id, user_name, game, puzzle_id, solved, rank_score, display_score, extra_url, ingest_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(board_date, user_id, game, puzzle_id) DO UPDATE SET
                         solved=excluded.solved,
                         rank_score=excluded.rank_score,
                         display_score=excluded.display_score,
-                        extra_url=COALESCE(excluded.extra_url, scores.extra_url)
+                        extra_url=COALESCE(excluded.extra_url, scores.extra_url),
+                        ingest_id=excluded.ingest_id
                 """, (
                     board_date, user_id, user_name,
                     g["game"], g["puzzle_id"], g["solved"],
-                    g["rank_score"], g["display_score"], g["extra_url"]
+                    g["rank_score"], g["display_score"], g["extra_url"], ingest_id
                 ))
             conn.commit()
 
