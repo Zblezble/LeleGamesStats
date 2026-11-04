@@ -694,11 +694,10 @@ async def games(interaction: discord.Interaction):
         lines.append(f"{meta['icon']} **{name}** · {meta['desc']} · [play]({meta['url']})")
 
     embed = discord.Embed(
-        title="Supported games",
-        description="Paste a result in this channel and it lands on the daily board.",
+        title=f"Supported games · {len(GAME_META)}",
+        description="\n".join(lines),  # description allows 4096 chars; a single field would cap at 1024
         color=0x64748B
     )
-    embed.add_field(name=f"{len(GAME_META)} games", value="\n".join(lines), inline=False)
     await interaction.response.send_message(embed=embed)
 
 
