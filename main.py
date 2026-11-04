@@ -55,6 +55,12 @@ def get_game_icon(game_name: str) -> str:
     return get_game_meta(game_name)["icon"]
 
 
+# Games where every posted score competes for daily podium points, ranked by
+# closeness (no elimination). All other games stay elimination-style: only
+# solved runs score points. Stats/'win' semantics are per-parser and unchanged.
+GRADED_GAMES = {"Trivmount"}
+
+
 # ================= DATABASE SETUP =================
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
@@ -431,11 +437,15 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     for (game, pid), entries in grouped.items():
         icon = get_game_icon(game)
         lines = []
-        # Calculate dense ranks so ties share the same medal
-        unique_scores = sorted(list({e[3] for e in entries if e[2] == 1}))
+        # Podium points pool: solved entries, plus every real score in graded games
+        # (rank_score >= 10000 marks a zero/no-show result in graded games)
+        graded = game in GRADED_GAMES
+        pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
+        unique_scores = sorted(list(pool))
 
         for uid, uname, solved, rscore, dscore, url in entries:
-            if solved:
+            competes = solved or (graded and rscore < 10000)
+            if competes:
                 names[uid] = uname
                 rank_idx = unique_scores.index(rscore)
                 if len(entries) >= 2 and rank_idx < 3:
