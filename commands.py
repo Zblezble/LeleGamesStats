@@ -14,6 +14,10 @@ from config import today_str
 from games import ACTIVE_GAME_META, get_game_icon
 
 
+@app_commands.describe(
+    opponent="Player to compare against",
+    player1="Defaults to you if omitted",
+)
 async def h2h(interaction: discord.Interaction, opponent: discord.Member, player1: discord.Member = None):
     p1 = player1 or interaction.user
     p2 = opponent
@@ -63,6 +67,7 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
     await interaction.response.send_message(embed=embed)
 
 
+@app_commands.describe(player="Defaults to you if omitted")
 async def stats(interaction: discord.Interaction, player: discord.Member = None):
     target = player or interaction.user
 
