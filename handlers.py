@@ -1,0 +1,141 @@
+"""Discord event wiring: message ingestion flow and daily board maintenance."""
+import asyncio
+import sqlite3
+
+import discord
+
+import config
+import db
+import embeds
+import games
+import parsers
+
+
+async def _self_destruct(msg: discord.Message, delay: int):
+    """Delete a bot acknowledgement after a delay so the channel stays clean."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except discord.NotFound:
+        pass
+
+
+async def update_or_post_daily_board(channel: discord.TextChannel, board_date: str):
+    """Edits today's existing summary Embed, or posts a new one if none exists yet."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT layout FROM channel_settings WHERE channel_id = ?", (channel.id,))
+        layout_row = c.fetchone()
+        layout = layout_row[0] if layout_row else "grid"
+
+    embed = embeds.build_daily_embed(board_date, layout)
+
+    with sqlite3.connect(config.DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT message_id FROM daily_boards WHERE board_date = ?", (board_date,))
+        row = c.fetchone()
+
+        if row:
+            msg_id = row[0]
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.edit(embed=embed)
+                return
+            except discord.NotFound:
+                pass  # Message was manually deleted, fall through to create a new one
+            except discord.HTTPException as e:
+                print(f"Warning: failed to edit board message: {e}")
+                return
+
+        try:
+            new_msg = await channel.send(embed=embed)
+        except discord.HTTPException as e:
+            print(f"Warning: failed to post board message: {e}")
+            return
+        c.execute(
+            "INSERT OR REPLACE INTO daily_boards (board_date, channel_id, message_id) VALUES (?, ?, ?)",
+            (board_date, channel.id, new_msg.id)
+        )
+        conn.commit()
+
+
+def register(bot):
+    """Attach event listeners. The bot instance is captured so on_message can
+    fall through to prefix-command processing without a circular import."""
+
+    async def on_ready():
+        print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+
+    async def on_message(message: discord.Message):
+        # Ignore our own messages, other bots (like the official Wordle Activity app), DMs, or other channels
+        if message.author.bot:
+            return
+        if message.guild is None:
+            return
+        if config.SCORE_CHANNEL_ID and message.channel.id != config.SCORE_CHANNEL_ID:
+            return
+
+        board_date = config.today_str()
+        user_id = message.author.id
+        user_name = message.author.display_name
+        parsed_games = parsers.parse_all_games(message.content)
+
+        if not parsed_games:
+            # Result-looking text that failed to parse: log it, clean it, and say so.
+            if games.RESULT_HINT_RE.search(message.content):
+                db.log_ingest(board_date, user_id, user_name, message.content, "", "broken")
+                try:
+                    await message.delete()
+                except (discord.Forbidden, discord.NotFound):
+                    pass
+                ack = await message.channel.send(
+                    f"**{user_name}** · that looked like a game result, but I couldn't read it. "
+                    "It's in the ingest log — check the format on the game's site."
+                )
+                asyncio.create_task(_self_destruct(ack, 25))
+                return
+            # Regular chat/banter message — leave it alone!
+            await bot.process_commands(message)
+            return
+
+        summary = ", ".join(f"{games.get_game_icon(g['game'])} {g['game']}" for g in parsed_games)
+        if len(parsed_games) > 3:
+            summary = ", ".join(f"{games.get_game_icon(g['game'])} {g['game']}" for g in parsed_games[:3]) \
+                      + f" +{len(parsed_games) - 3} more"
+        db.log_ingest(board_date, user_id, user_name, message.content, summary, "ok")
+
+        with sqlite3.connect(config.DB_PATH) as conn:
+            c = conn.cursor()
+            for g in parsed_games:
+                c.execute("""
+                    INSERT INTO scores (board_date, user_id, user_name, game, puzzle_id, solved, rank_score, display_score, extra_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(board_date, user_id, game, puzzle_id) DO UPDATE SET
+                        solved=excluded.solved,
+                        rank_score=excluded.rank_score,
+                        display_score=excluded.display_score,
+                        extra_url=COALESCE(excluded.extra_url, scores.extra_url)
+                """, (
+                    board_date, user_id, user_name,
+                    g["game"], g["puzzle_id"], g["solved"],
+                    g["rank_score"], g["display_score"], g["extra_url"]
+                ))
+            conn.commit()
+
+        # 1. Auto-delete the user's raw score dump to keep the channel clean
+        try:
+            await message.delete()
+        except discord.Forbidden:
+            print("Warning: Bot lacks 'Manage Messages' permission to delete raw score posts.")
+        except discord.NotFound:
+            pass
+
+        # 2. Confirm with a short acknowledgement that self-destructs
+        ack = await message.channel.send(f"**{user_name}** · logged: {summary}")
+        asyncio.create_task(_self_destruct(ack, 10))
+
+        # 3. Update the single Daily Digest Embed
+        await update_or_post_daily_board(message.channel, board_date)
+
+    bot.add_listener(on_ready, "on_ready")
+    bot.add_listener(on_message, "on_message")

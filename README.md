@@ -46,6 +46,20 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 
    Scores are stored in a local `scores.db` SQLite file (created automatically).
 
+## Project layout
+
+```
+main.py       → entry point: bot instance + wiring only
+config.py     → env vars (token, channel, BOT_TZ, DISABLED_GAMES, DEBUG_LOG), date helpers
+games.py      → game registry (icons/links/descriptions), GRADED_GAMES, result-hint regex
+db.py         → SQLite schema + ingest log
+parsers.py    → parse_all_games: one share-text -> result dicts (the file that grows per game)
+embeds.py     → daily board + /missing checklist builders
+handlers.py   → on_message ingest flow + daily board maintenance
+commands.py   → slash commands, attached via register(bot)
+test_parsers.py → fixture suite: python test_parsers.py (run it before/after parser changes)
+```
+
 ## Security note
 
 Never commit your bot token. This project reads it from `DISCORD_BOT_TOKEN`; there is no token in the source. If you previously shared or committed a real token anywhere, [regenerate it](https://discord.com/developers/applications) immediately.
