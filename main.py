@@ -354,13 +354,17 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 13. TRIVMOUNT (Trivmount #40 11/12 + grid row)
+    # A win is a perfect climb (total/total). Imperfect scores rank below all perfect ones,
+    # ordered among themselves by how close they got.
     for m in re.finditer(r"Trivmount #(\d+)\s+(\d+)/(\d+)", text):
         pid, correct, total = m.group(1), int(m.group(2)), int(m.group(3))
+        frac = correct / total if total else 0.0
+        solved = 1 if total > 0 and correct == total else 0
         results.append({
             "game": "Trivmount",
             "puzzle_id": f"#{pid}",
-            "solved": 1 if correct > 0 else 0,
-            "rank_score": float(-(correct / total) * 100) if total else 0.0,  # Higher ratio = better
+            "solved": solved,
+            "rank_score": (-frac * 100) if solved else (10000 - frac * 100),
             "display_score": f"{correct}/{total}",
             "extra_url": None
         })
