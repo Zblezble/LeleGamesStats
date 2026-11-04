@@ -235,8 +235,10 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 6. TRAVLE (#travle #1419 +4 (3 rady))
+    # Scored/failed-with-X form. The score must be separated from the puzzle id,
+    # otherwise "#1421 (3 pryč)" would misparse as id #142 with score 1.
     for m in re.finditer(
-        r"#travle #(\d+)\s*([+\-]?\d+|X)(?:\s*\(([^)]+)\))?",
+        r"#travle #(\d+)\s+([+\-]?\d+|X)(?:\s*\(([^)]+)\))?",
         text, re.IGNORECASE
     ):
         pid, score_str, note = m.group(1), m.group(2), m.group(3)
@@ -255,6 +257,24 @@ def parse_all_games(text: str) -> list[dict]:
             "solved": solved,
             "rank_score": rank_score,
             "display_score": f"{score_str}{note_disp}",
+            "extra_url": None
+        })
+
+    # 6b. TRAVLE unfinished run: "#travle #1421 (3 pryč)" / "(3 away)" — no score,
+    # just a note saying how far from connecting (any locale). DNF, ranked by distance.
+    for m in re.finditer(
+        r"#travle #(\d+)\s*\(([^)]+)\)",
+        text, re.IGNORECASE
+    ):
+        pid, note = m.group(1), m.group(2)
+        away_m = re.match(r"\s*(\d+)", note)
+        away = int(away_m.group(1)) if away_m else 499
+        results.append({
+            "game": "Travle",
+            "puzzle_id": f"#{pid}",
+            "solved": 0,
+            "rank_score": float(500 + away),  # after all successes; closer finish = better
+            "display_score": f"DNF ({note})",
             "extra_url": None
         })
 
