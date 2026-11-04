@@ -27,6 +27,15 @@ def today_str() -> str:
     now = datetime.now(BOT_TZ) if BOT_TZ else datetime.now()
     return now.strftime("%Y-%m-%d")
 
+
+def date_label(board_date: str) -> str:
+    """'2026-11-03' -> 'Tue 3 Nov' (falls back to the raw string on parse failure)."""
+    try:
+        dt = datetime.strptime(board_date, "%Y-%m-%d")
+        return f"{dt.strftime('%a')} {dt.day} {dt.strftime('%b')}"
+    except ValueError:
+        return board_date
+
 # Game registry: icon + short description + link. Base names are matched by prefix,
 # so modes like "Roughly (Where from)" and "Magnitudle (Size It Up)" resolve too.
 GAME_META = {
@@ -416,14 +425,8 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
         """, (board_date,))
         rows = c.fetchall()
 
-    try:
-        dt = datetime.strptime(board_date, "%Y-%m-%d")
-        date_label = f"{dt.strftime('%a')} {dt.day} {dt.strftime('%b')}"
-    except ValueError:
-        date_label = board_date
-
     embed = discord.Embed(
-        title=f"🌅 Daily digest · {date_label}",
+        title=f"🌅 Daily digest · {date_label(board_date)}",
         description="Drop your raw game results in this channel. They get logged here and tidied away.",
         color=0xF59E0B,
         timestamp=datetime.now(timezone.utc)
@@ -694,6 +697,49 @@ async def repost_board(interaction: discord.Interaction):
 
     await update_or_post_daily_board(interaction.channel, board_date)
     await interaction.response.send_message("Board reposted at the bottom of the channel.", ephemeral=True)
+
+
+def build_missing_embed(user_id: int) -> discord.Embed:
+    """Personal daily checklist: games played today vs. still to play (with links)."""
+    board_date = today_str()
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT game, display_score FROM scores WHERE board_date = ? AND user_id = ?",
+            (board_date, user_id)
+        )
+        played_rows = c.fetchall()
+
+    played = {}  # base game key -> display_score (submodes collapse to their base game)
+    for game, dscore in played_rows:
+        for key in GAME_META:
+            if game.startswith(key):
+                played.setdefault(key, dscore)
+
+    missing = [k for k in GAME_META if k not in played]
+
+    embed = discord.Embed(
+        title=f"Today's checklist · {date_label(board_date)}",
+        color=0x64748B
+    )
+    if not played:
+        embed.description = "Nothing logged yet. Post your results in this channel."
+    elif not missing:
+        embed.description = f"All {len(GAME_META)} games played today. See you tomorrow."
+
+    if missing:
+        lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in GAME_META.items() if name in missing]
+        embed.add_field(name=f"To play · {len(missing)}", value="\n".join(lines), inline=False)
+    if played:
+        lines = [f"{GAME_META[name]['icon']} {name} · {played[name]}" for name in GAME_META if name in played]
+        embed.add_field(name=f"Done · {len(played)}", value="\n".join(lines), inline=False)
+
+    return embed
+
+
+@bot.tree.command(name="missing", description="Which of today's games you still have to play")
+async def missing(interaction: discord.Interaction):
+    await interaction.response.send_message(embed=build_missing_embed(interaction.user.id), ephemeral=True)
 
 
 @bot.tree.command(name="games", description="List supported games with descriptions and links")
