@@ -359,11 +359,20 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
-    # 13. TRIVMOUNT (Trivmount #40 11/12 + grid row)
-    # A win is a perfect climb (total/total). Imperfect scores rank below all perfect ones,
-    # ordered among themselves by how close they got.
-    for m in re.finditer(r"Trivmount #(\d+)\s+(\d+)/(\d+)", text):
-        pid, correct, total = m.group(1), int(m.group(2)), int(m.group(3))
+    # 13. TRIVMOUNT (Trivmount #40 11/12 | #40 ⛰️ 12/12 | #40 ⛰️ SUMMIT + grid row)
+    # A win is a perfect climb (total/total), which the share text renders as "SUMMIT".
+    # The ⛰️ marker and other decoration between id and score are tolerated.
+    for m in re.finditer(
+        r"Trivmount #(\d+)[^\d/\n]*(?:(\d+)/(\d+)|(SUMMIT))(?:\s*\n([⬜🟨🟩🟥🟧⬛]+))?",
+        text
+    ):
+        pid = m.group(1)
+        if m.group(4):  # SUMMIT = perfect run; take the length from the grid row
+            grid = m.group(5) or ""
+            total = len(grid) if grid else 12
+            correct = total
+        else:
+            correct, total = int(m.group(2)), int(m.group(3))
         frac = correct / total if total else 0.0
         solved = 1 if total > 0 and correct == total else 0
         results.append({
