@@ -17,7 +17,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
   - `/games` — lists supported games with short descriptions and links (private reply).
   - `/missing` — private (ephemeral) checklist: your games still to play today, with links.
   - `/undo` — removes the scores from your most recent post today (self-serve, ephemeral reply).
-  - `/remove game:… puzzle_id:… [user] [date]` — precise entry removal, requires Manage Messages (ephemeral reply; logged as `admin_remove`).
+  - `/remove game:… puzzle_id:… [user] [date]` — precise entry removal, requires Manage Messages. Deletions are announced publicly (transparency) and logged as `admin_remove`.
 
 ## Setup
 

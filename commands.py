@@ -182,11 +182,11 @@ async def remove_entry(interaction: discord.Interaction,
     if has_board:
         await handlers.update_or_post_daily_board(interaction.channel, board_date)
 
+    # Deletions by mods are announced publicly for transparency; self-/undo stays quiet.
     await interaction.response.send_message(
-        f"Removed {result['count']} entr{'y' if result['count'] == 1 else 'ies'}"
+        f"🧹 Removed {result['count']} entr{'y' if result['count'] == 1 else 'ies'}"
         f" · {', '.join(result['games'])} {', '.join(result['puzzle_ids'])} · {board_date}"
-        f" · {', '.join(result['users'])}",
-        ephemeral=True
+        f" · {', '.join(result['users'])} · by {interaction.user.display_name}"
     )
 
 
