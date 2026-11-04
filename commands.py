@@ -1,6 +1,7 @@
 """Slash commands. register(bot) attaches them to the command tree."""
 import re
 import sqlite3
+from datetime import datetime, timezone
 
 import discord
 from discord import app_commands
@@ -206,10 +207,24 @@ async def undo(interaction: discord.Interaction):
     )
 
 
+def _reset_label(meta: dict) -> str:
+    """Per-game daily reset note, converted to BOT_TZ where the source is UTC."""
+    kind = meta.get("reset")
+    if kind == "local":
+        return " · resets 00:00 local"
+    if kind == "utc":
+        if config.BOT_TZ:
+            local = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) \
+                .astimezone(config.BOT_TZ)
+            return f" · resets {local.strftime('%H:%M')} (00:00 UTC)"
+        return " · resets 00:00 UTC"
+    return ""
+
+
 async def games(interaction: discord.Interaction):
     lines = []
     for name, meta in ACTIVE_GAME_META.items():
-        lines.append(f"{meta['icon']} **{name}** · {meta['desc']} · [play]({meta['url']})")
+        lines.append(f"{meta['icon']} **{name}** · {meta['desc']}{_reset_label(meta)} · [play]({meta['url']})")
 
     embed = discord.Embed(
         title=f"Supported games · {len(ACTIVE_GAME_META)}",

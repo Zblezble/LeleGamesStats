@@ -6,14 +6,14 @@ import config
 # Base names are matched by prefix, so modes like "Roughly (Where from)"
 # and "Magnitudle (Size It Up)" resolve to their base game too.
 GAME_META = {
-    "Wordle": {"icon": "🟩", "desc": "daily 5-letter word, 6 tries", "url": "https://www.nytimes.com/games/wordle"},
-    "Worldle": {"icon": "🗺️", "desc": "guess the country from its outline", "url": "https://worldle.teuteuf.fr"},
+    "Wordle": {"icon": "🟩", "desc": "daily 5-letter word, 6 tries", "url": "https://www.nytimes.com/games/wordle", "reset": "local"},
+    "Worldle": {"icon": "🗺️", "desc": "guess the country from its outline", "url": "https://worldle.teuteuf.fr", "reset": "local"},
     "Flagle": {"icon": "🚩", "desc": "guess the country's flag in 6 tries", "url": "https://www.flagle.io/"},
     "Globle": {"icon": "🌎", "desc": "hot/cold country guessing", "url": "https://globle-game.com"},
-    "Travle": {"icon": "✈️", "desc": "connect two countries across borders", "url": "https://travle.earth/"},
+    "Travle": {"icon": "✈️", "desc": "connect two countries across borders", "url": "https://travle.earth/", "reset": "local"},
     "Metazooa": {"icon": "🐾", "desc": "guess the animal from its taxonomy", "url": "https://metazooa.com"},
     "Redactle": {"icon": "████", "desc": "unredact the hidden Wikipedia article", "url": "https://redactle.net"},
-    "Songless": {"icon": "🎵", "desc": "guess songs from short clips, per genre", "url": "https://songless.app"},
+    "Songless": {"icon": "🎵", "desc": "guess songs from short clips, per genre", "url": "https://songless.app", "reset": "utc"},
     "Centumth": {"icon": "💯", "desc": "100-question daily knowledge quiz", "url": "https://centumth.com"},
     "Roughly": {"icon": "📏", "desc": "daily estimation duels", "url": "https://roughly.is"},
     "Magnitudle": {"icon": "📐", "desc": "size-it-up estimation rounds", "url": "https://magnitudle.com"},
