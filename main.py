@@ -679,8 +679,8 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="repost_board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")
-async def repost_board(interaction: discord.Interaction):
+@bot.tree.command(name="board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")
+async def board(interaction: discord.Interaction):
     board_date = today_str()
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
@@ -753,7 +753,7 @@ async def games(interaction: discord.Interaction):
         description="\n".join(lines),  # description allows 4096 chars; a single field would cap at 1024
         color=0x64748B
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")
