@@ -34,6 +34,8 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
    |---------------------|----------|----------------------------------------------|
    | `DISCORD_BOT_TOKEN` | yes      | Your bot token. Keep it secret.              |
    | `SCORE_CHANNEL_ID`  | no       | Channel to watch. If unset, watches all.     |
+   | `BOT_TZ`            | no       | Timezone for the daily cutoff, e.g. `Europe/Warsaw`. Defaults to server-local time. |
+   | `DISABLED_GAMES`    | no       | Comma-separated games to turn off, e.g. `Wordle`. Hidden from the board, `/games` and `/missing`; on by default. |
 
 4. Run:
 

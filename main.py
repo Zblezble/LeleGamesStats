@@ -12,9 +12,13 @@ from discord.ext import commands
 #   SCORE_CHANNEL_ID  - the channel to watch (optional; if unset, watches all channels)
 #   BOT_TZ            - timezone for daily board cutoff, e.g. "Europe/Warsaw"
 #                     (optional; defaults to the server's local time)
+#   DISABLED_GAMES    - comma-separated game names to ignore, e.g. "Wordle"
+#                     (optional; everything is enabled by default)
 BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
 SCORE_CHANNEL_ID = int(os.getenv("SCORE_CHANNEL_ID", "0")) or None
 DB_PATH = "scores.db"
+
+DISABLED_GAMES = {g.strip().lower() for g in os.getenv("DISABLED_GAMES", "").split(",") if g.strip()}
 
 try:
     from zoneinfo import ZoneInfo
@@ -59,6 +63,10 @@ def get_game_meta(game_name: str) -> dict:
         if game_name.startswith(key):
             return meta
     return {"icon": "🧩", "desc": "", "url": ""}
+
+
+# Registry minus any games turned off via DISABLED_GAMES — drives /games and /missing.
+ACTIVE_GAME_META = {k: v for k, v in GAME_META.items() if k.lower() not in DISABLED_GAMES}
 
 def get_game_icon(game_name: str) -> str:
     return get_game_meta(game_name)["icon"]
@@ -393,6 +401,9 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    if DISABLED_GAMES:
+        results = [r for r in results
+                   if not any(r["game"].lower().startswith(d) for d in DISABLED_GAMES)]
     return results
 
 
@@ -712,11 +723,11 @@ def build_missing_embed(user_id: int) -> discord.Embed:
 
     played = {}  # base game key -> display_score (submodes collapse to their base game)
     for game, dscore in played_rows:
-        for key in GAME_META:
+        for key in ACTIVE_GAME_META:
             if game.startswith(key):
                 played.setdefault(key, dscore)
 
-    missing = [k for k in GAME_META if k not in played]
+    missing = [k for k in ACTIVE_GAME_META if k not in played]
 
     embed = discord.Embed(
         title=f"Today's checklist · {date_label(board_date)}",
@@ -725,13 +736,13 @@ def build_missing_embed(user_id: int) -> discord.Embed:
     if not played:
         embed.description = "Nothing logged yet. Post your results in this channel."
     elif not missing:
-        embed.description = f"All {len(GAME_META)} games played today. See you tomorrow."
+        embed.description = f"All {len(ACTIVE_GAME_META)} games played today. See you tomorrow."
 
     if missing:
-        lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in GAME_META.items() if name in missing]
+        lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in ACTIVE_GAME_META.items() if name in missing]
         embed.add_field(name=f"To play · {len(missing)}", value="\n".join(lines), inline=False)
     if played:
-        lines = [f"{GAME_META[name]['icon']} {name} · {played[name]}" for name in GAME_META if name in played]
+        lines = [f"{ACTIVE_GAME_META[name]['icon']} {name} · {played[name]}" for name in ACTIVE_GAME_META if name in played]
         embed.add_field(name=f"Done · {len(played)}", value="\n".join(lines), inline=False)
 
     return embed
@@ -745,11 +756,11 @@ async def missing(interaction: discord.Interaction):
 @bot.tree.command(name="games", description="List supported games with descriptions and links")
 async def games(interaction: discord.Interaction):
     lines = []
-    for name, meta in GAME_META.items():
+    for name, meta in ACTIVE_GAME_META.items():
         lines.append(f"{meta['icon']} **{name}** · {meta['desc']} · [play]({meta['url']})")
 
     embed = discord.Embed(
-        title=f"Supported games · {len(GAME_META)}",
+        title=f"Supported games · {len(ACTIVE_GAME_META)}",
         description="\n".join(lines),  # description allows 4096 chars; a single field would cap at 1024
         color=0x64748B
     )
