@@ -8,6 +8,60 @@ import config
 from games import ACTIVE_GAME_META, GRADED_GAMES, get_game_icon
 
 
+def _entries_by_game(board_date: str):
+    """Score rows for a date, grouped (game, puzzle_id) -> list of tuples."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("""
+            SELECT game, puzzle_id, user_id, user_name, solved, rank_score, display_score, extra_url
+            FROM scores
+            WHERE board_date = ?
+            ORDER BY game ASC, rank_score ASC, timestamp ASC
+        """, (board_date,))
+        rows = c.fetchall()
+    grouped = {}
+    for game, pid, uid, uname, solved, rscore, dscore, url in rows:
+        grouped.setdefault((game, pid), []).append((uid, uname, solved, rscore, dscore, url))
+    return grouped
+
+
+def placement_of(board_date: str, game: str, puzzle_id: str, user_id: int) -> str | None:
+    """User's placement in one game today, e.g. '1/3' (ties share the rank).
+    None if the user is outside the competing pool (DNF in elimination games)."""
+    grouped = _entries_by_game(board_date)
+    entries = grouped.get((game, puzzle_id))
+    if not entries:
+        return None
+    graded = game in GRADED_GAMES
+    pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
+    unique_scores = sorted(list(pool))
+    for uid, _uname, solved, rscore, _d, _u in entries:
+        if uid == user_id:
+            if solved or (graded and rscore < 10000):
+                return f"{unique_scores.index(rscore) + 1}/{len(entries)}"
+            return None
+    return None
+
+
+def compute_daily_points(board_date: str):
+    """Daily podium points per user id (3/2/1 for top-3 placement in games with >=2 players)."""
+    grouped = _entries_by_game(board_date)
+    mvp_points = {}
+    names = {}
+    for (game, _pid), entries in grouped.items():
+        graded = game in GRADED_GAMES
+        pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
+        unique_scores = sorted(list(pool))
+        for uid, uname, solved, rscore, _d, _u in entries:
+            competes = solved or (graded and rscore < 10000)
+            if competes:
+                names[uid] = uname
+                rank_idx = unique_scores.index(rscore)
+                if len(entries) >= 2 and rank_idx < 3:
+                    mvp_points[uid] = mvp_points.get(uid, 0) + (3 - rank_idx)
+    return mvp_points, names
+
+
 def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     """Constructs the single consolidated Daily Leaderboard Embed for a given date."""
     with sqlite3.connect(config.DB_PATH) as conn:
@@ -37,28 +91,13 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
         key = (game, pid)
         grouped.setdefault(key, []).append((uid, uname, solved, rscore, dscore, url))
 
-    # Calculate Overall Daily MVP Points (1st = 3pts, 2nd = 2pts, 3rd = 1pt in games with >=2 players)
-    mvp_points = {}
-    names = {}  # uid -> display_name (points keyed by uid so same-named players don't merge)
+    # Daily MVP points (1st = 3pts, 2nd = 2pts, 3rd = 1pt in games with >=2 players)
+    mvp_points, names = compute_daily_points(board_date)
 
     for (game, pid), entries in grouped.items():
         icon = get_game_icon(game)
         lines = []
-        # Podium points pool: solved entries, plus every real score in graded games
-        # (rank_score >= 10000 marks a zero/no-show result in graded games)
-        graded = game in GRADED_GAMES
-        pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
-        unique_scores = sorted(list(pool))
-
         for uid, uname, solved, rscore, dscore, url in entries:
-            competes = solved or (graded and rscore < 10000)
-            if competes:
-                names[uid] = uname
-                rank_idx = unique_scores.index(rscore)
-                if len(entries) >= 2 and rank_idx < 3:
-                    pts = 3 - rank_idx
-                    mvp_points[uid] = mvp_points.get(uid, 0) + pts
-
             duel_str = f" · [rematch]({url})" if url else ""
             lines.append(f"{uname} `{dscore}`{duel_str}")
 

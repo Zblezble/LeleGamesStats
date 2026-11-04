@@ -98,9 +98,9 @@ def register(bot):
             await bot.process_commands(message)
             return
 
-        summary = ", ".join(f"{games.get_game_icon(g['game'])} {g['game']}" for g in parsed_games)
+        summary = ", ".join(f"{games.get_game_icon(g['game'])} **{g['game']}**" for g in parsed_games)
         if len(parsed_games) > 3:
-            summary = ", ".join(f"{games.get_game_icon(g['game'])} {g['game']}" for g in parsed_games[:3]) \
+            summary = ", ".join(f"{games.get_game_icon(g['game'])} **{g['game']}**" for g in parsed_games[:3]) \
                       + f" +{len(parsed_games) - 3} more"
         ingest_id = db.log_ingest(board_date, user_id, user_name, message.content, summary, "ok")
 
@@ -131,12 +131,25 @@ def register(bot):
         except discord.NotFound:
             pass
 
-        # 2. Confirm with a short acknowledgement that self-destructs
-        ack = await message.channel.send(f"{user_name} · logged: {summary}")
-        asyncio.create_task(_self_destruct(ack, 10))
-
-        # 3. Update the single Daily Digest Embed
+        # 2. Update the single Daily Digest Embed
         await update_or_post_daily_board(message.channel, board_date)
+
+        # 3. Confirm with a short acknowledgement (self-destructs) incl. current placement
+        placements = []
+        for g in parsed_games:
+            p = embeds.placement_of(board_date, g["game"], g["puzzle_id"], user_id)
+            placements.append(f"{games.get_game_icon(g['game'])} **{g['game']}** `{p}`" if p else
+                              f"{games.get_game_icon(g['game'])} **{g['game']}** DNF")
+        lines = [f"{user_name} · logged: " + " · ".join(placements)]
+
+        mvp_points, names = embeds.compute_daily_points(board_date)
+        if names and user_id in mvp_points:
+            standing = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
+            pos = [i + 1 for i, (u, _) in enumerate(standing) if u == user_id][0]
+            lines.append(f"Daily: {pos}. · `{mvp_points[user_id]} pts`")
+
+        ack = await message.channel.send("\n".join(lines))
+        asyncio.create_task(_self_destruct(ack, 12))
 
     bot.add_listener(on_ready, "on_ready")
     bot.add_listener(on_message, "on_message")
