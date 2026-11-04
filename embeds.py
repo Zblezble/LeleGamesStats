@@ -60,7 +60,7 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
                     mvp_points[uid] = mvp_points.get(uid, 0) + pts
 
             duel_str = f" · [rematch]({url})" if url else ""
-            lines.append(f"**{uname}** `{dscore}`{duel_str}")
+            lines.append(f"{uname} `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
         # Clamp to Discord's 1024-char field limit so a huge game can't kill the whole board
@@ -73,7 +73,7 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
         standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
-        standings_str = " · ".join([f"**{names[u]}** {p}" for u, p in standings])
+        standings_str = " · ".join([f"{names[u]} {p}" for u, p in standings])
         embed.add_field(name="Today's points (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt)", value=standings_str, inline=False)
 
     return embed
@@ -111,7 +111,7 @@ def build_missing_embed(user_id: int) -> discord.Embed:
         lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in ACTIVE_GAME_META.items() if name in missing]
         embed.add_field(name=f"To play · {len(missing)}", value="\n".join(lines), inline=False)
     if played:
-        lines = [f"{ACTIVE_GAME_META[name]['icon']} {name} · {played[name]}" for name in ACTIVE_GAME_META if name in played]
+        lines = [f"{ACTIVE_GAME_META[name]['icon']} **{name}** · {played[name]}" for name in ACTIVE_GAME_META if name in played]
         embed.add_field(name=f"Done · {len(played)}", value="\n".join(lines), inline=False)
 
     return embed

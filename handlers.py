@@ -89,7 +89,7 @@ def register(bot):
                 except (discord.Forbidden, discord.NotFound):
                     pass
                 ack = await message.channel.send(
-                    f"**{user_name}** · that looked like a game result, but I couldn't read it. "
+                    f"{user_name} · that looked like a game result, but I couldn't read it. "
                     "It's in the ingest log — check the format on the game's site."
                 )
                 asyncio.create_task(_self_destruct(ack, 25))
@@ -132,7 +132,7 @@ def register(bot):
             pass
 
         # 2. Confirm with a short acknowledgement that self-destructs
-        ack = await message.channel.send(f"**{user_name}** · logged: {summary}")
+        ack = await message.channel.send(f"{user_name} · logged: {summary}")
         asyncio.create_task(_self_destruct(ack, 10))
 
         # 3. Update the single Daily Digest Embed

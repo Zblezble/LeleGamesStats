@@ -29,7 +29,7 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
 
     if not matchups:
         await interaction.response.send_message(
-            f"No shared puzzles found between **{p1.display_name}** and **{p2.display_name}** yet.",
+            f"No shared puzzles found between {p1.display_name} and {p2.display_name} yet.",
             ephemeral=True
         )
         return
@@ -50,7 +50,7 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
 
     embed = discord.Embed(
         title=f"Head-to-head: {p1.display_name} vs {p2.display_name}",
-        description=f"**{tot_w1}–{tot_w2}** overall · {tot_ties} tied",
+        description=f"{tot_w1}–{tot_w2} overall · {tot_ties} tied",
         color=0x64748B
     )
     lines = []
@@ -89,7 +89,7 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
                     rec[2] += 1
 
     if not game_totals:
-        await interaction.response.send_message(f"No games logged for **{target.display_name}** yet.", ephemeral=True)
+        await interaction.response.send_message(f"No games logged for {target.display_name} yet.", ephemeral=True)
         return
 
     total_played = sum(v[0] for v in game_totals.values())
@@ -97,7 +97,7 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
 
     embed = discord.Embed(
         title=f"All-time stats: {target.display_name}",
-        description=f"**{total_played}** games logged · **{total_crowns}** 🥇 golds",
+        description=f"{total_played} games logged · {total_crowns} 🥇 golds",
         color=0x64748B
     )
     lines = []
