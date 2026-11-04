@@ -74,6 +74,35 @@ def log_ingest(board_date: str, user_id: int, user_name: str, raw_text: str,
     return ingest_id
 
 
+def remove_entries(board_date: str, game: str, puzzle_id: str, user_id: int | None = None):
+    """Remove score entries matching (date, game, puzzle_id[, user]) — admin cleanup.
+    Game matches by name or by submode prefix; puzzle_id accepts '142' or '#142'.
+    Returns dict(count, game, puzzle_id, users) if anything was deleted, else None."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        c = conn.cursor()
+        pid_variants = [puzzle_id] if puzzle_id.startswith("#") else [puzzle_id, f"#{puzzle_id}"]
+        rows = c.execute(
+            "SELECT DISTINCT game, puzzle_id, user_id, user_name FROM scores"
+            " WHERE board_date = ?"
+            " AND (game = ? COLLATE NOCASE OR game LIKE (? || ' (%') COLLATE NOCASE)"
+            f" AND puzzle_id IN ({','.join('?' * len(pid_variants))})"
+            + (" AND user_id = ?" if user_id else ""),
+            (board_date, game, game, *pid_variants, *((user_id,) if user_id else ()))
+        ).fetchall()
+        if not rows:
+            return None
+        for g_row, pid_row, uid, _ in rows:
+            c.execute(
+                "DELETE FROM scores WHERE board_date = ? AND game = ? AND puzzle_id = ? AND user_id = ?",
+                (board_date, g_row, pid_row, uid)
+            )
+        conn.commit()
+        users = sorted({uname for _, _, _, uname in rows})
+        games_found = sorted({g for g, _, _, _ in rows})
+        pids_found = sorted({p for _, p, _, _ in rows})
+        return {"count": len(rows), "games": games_found, "puzzle_ids": pids_found, "users": users}
+
+
 def undo_latest_ingest(board_date: str, user_id: int):
     """Delete the scores created by the user's newest 'ok' ingest of the day and
     mark that ingest undone. Returns (parsed_summary, rows_deleted) or None."""

@@ -1,7 +1,9 @@
 """Slash commands. register(bot) attaches them to the command tree."""
+import re
 import sqlite3
 
 import discord
+from discord import app_commands
 
 import config
 import db
@@ -131,6 +133,63 @@ async def missing(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embeds.build_missing_embed(interaction.user.id), ephemeral=True)
 
 
+async def _game_autocomplete(_interaction, current: str):
+    with sqlite3.connect(config.DB_PATH) as conn:
+        names = [r[0] for r in conn.execute("SELECT DISTINCT game FROM scores ORDER BY game").fetchall()]
+    choices = [n for n in names if current.lower() in n.lower()][:25]
+    return [app_commands.Choice(name=n, value=n) for n in choices]
+
+
+@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.describe(
+    game="Game name (from the board)",
+    puzzle_id="Puzzle id, e.g. 142 or #142 or 2026-11-03",
+    user="Limit removal to this player (omit to remove everyone for that game+id)",
+    date="Board date YYYY-MM-DD (default: today)",
+)
+@app_commands.autocomplete(game=_game_autocomplete)
+async def remove_entry(interaction: discord.Interaction,
+                       game: str,
+                       puzzle_id: str,
+                       user: discord.Member | None = None,
+                       date: str | None = None):
+    if date is None:
+        board_date = today_str()
+    else:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+            await interaction.response.send_message("Date must be YYYY-MM-DD.", ephemeral=True)
+            return
+        board_date = date
+
+    result = db.remove_entries(board_date, game, puzzle_id, user.id if user else None)
+    if result is None:
+        await interaction.response.send_message(
+            f"No matching entries · {game} · {puzzle_id} · {board_date}"
+            + (f" · {user.display_name}" if user else ""),
+            ephemeral=True
+        )
+        return
+
+    db.log_ingest(
+        board_date, interaction.user.id, interaction.user.display_name,
+        f"/remove game={game} id={puzzle_id} user={user.display_name if user else '*'} date={board_date}",
+        f"removed {result['count']}: {', '.join(result['users'])}", "admin_remove"
+    )
+
+    # Re-render the day's board only if one already exists (don't create boards for old dates)
+    with sqlite3.connect(config.DB_PATH) as conn:
+        has_board = conn.execute("SELECT 1 FROM daily_boards WHERE board_date = ?", (board_date,)).fetchone()
+    if has_board:
+        await handlers.update_or_post_daily_board(interaction.channel, board_date)
+
+    await interaction.response.send_message(
+        f"Removed {result['count']} entr{'y' if result['count'] == 1 else 'ies'}"
+        f" · {', '.join(result['games'])} {', '.join(result['puzzle_ids'])} · {board_date}"
+        f" · {', '.join(result['users'])}",
+        ephemeral=True
+    )
+
+
 async def undo(interaction: discord.Interaction):
     """Remove the scores from the caller's most recent ingest of the day."""
     result = db.undo_latest_ingest(today_str(), interaction.user.id)
@@ -189,5 +248,6 @@ def register(bot):
     bot.tree.command(name="board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")(board)
     bot.tree.command(name="missing", description="Which of today's games you still have to play")(missing)
     bot.tree.command(name="undo", description="Remove the scores from your most recent post today")(undo)
+    bot.tree.command(name="remove", description="Remove a score entry (requires Manage Messages)")(remove_entry)
     bot.tree.command(name="games", description="List supported games with descriptions and links")(games)
     bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")(layout_switch)
