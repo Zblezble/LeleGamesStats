@@ -362,8 +362,9 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 12. MAJORITY (Majority #64 \n ☆⭐☆☆⭐ \n 2/5 majorities · 52% crowd sync)
+    # The percentage may be mangled ("64kkk%") — tolerate a few junk chars before "%".
     for m in re.finditer(
-        r"Majority #(\d+)\s*\n(?:[☆⭐]+\s*\n)?(\d+)/(\d+) majorities · (\d+)% crowd sync",
+        r"Majority #(\d+)\s*\n(?:[☆⭐]+\s*\n)?(\d+)/(\d+) majorities · (\d+)[^\d%]{0,5}% crowd sync",
         text
     ):
         pid, maj, total, sync = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
