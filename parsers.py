@@ -137,7 +137,8 @@ def parse_all_games(text: str) -> list[dict]:
             h_m = re.search(r"(\d+)\s*(?:rad|hint)", note, re.IGNORECASE)
             if h_m:
                 hints = int(h_m.group(1))
-        rank_score = float(extra_guesses) + (hints * 0.1)
+        # Hints cost like guesses, increasingly: 1st +1, 2nd +2, 3rd +3 (triangular)
+        rank_score = float(extra_guesses) + (hints * (hints + 1) / 2)
         note_disp = f" ({note})" if note else ""
         results.append({
             "game": "Travle",
