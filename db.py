@@ -49,7 +49,30 @@ def init_db():
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS day_wraps (
+                board_date TEXT PRIMARY KEY,
+                message_id INTEGER
+            )
+        """)
         conn.commit()
+
+
+def wrap_already_posted(board_date: str) -> bool:
+    with sqlite3.connect(config.DB_PATH) as conn:
+        return conn.execute("SELECT 1 FROM day_wraps WHERE board_date = ?", (board_date,)).fetchone() is not None
+
+
+def mark_wrap_posted(board_date: str, message_id: int):
+    with sqlite3.connect(config.DB_PATH) as conn:
+        conn.execute("INSERT OR REPLACE INTO day_wraps (board_date, message_id) VALUES (?, ?)",
+                     (board_date, message_id))
+        conn.commit()
+
+
+def day_has_scores(board_date: str) -> bool:
+    with sqlite3.connect(config.DB_PATH) as conn:
+        return conn.execute("SELECT 1 FROM scores WHERE board_date = ? LIMIT 1", (board_date,)).fetchone() is not None
 
         # Migration for existing deployments: scores.ingest_id links a stored
         # result to the ingest_log row that created it (powers /undo).

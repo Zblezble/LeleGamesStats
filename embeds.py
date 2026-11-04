@@ -118,6 +118,33 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     return embed
 
 
+def build_wrap_embed(board_date: str) -> discord.Embed | None:
+    """Locked-day wrap: final standings + day's winner. None if nobody scored."""
+    if not _entries_by_game(board_date):
+        return None
+    mvp_points, names = compute_daily_points(board_date)
+
+    embed = discord.Embed(
+        title=f"🏆 Yesterday's wrap · {config.date_label(board_date)}",
+        color=0xF59E0B,
+    )
+    if mvp_points:
+        standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
+        standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
+        embed.add_field(name="Final standings (🥇 3 · 🥈 2 · 🥉 1)", value=standings_str, inline=False)
+
+        best = standings[0][1]
+        winners = [names[u] for u, p in standings if p == best]
+        label = " and ".join(winners)
+        verb = "split" if len(winners) > 1 else "takes"
+        embed.add_field(name="\u200b", value=f"🏆 {label} {verb} the day with `{best}` pts.", inline=False)
+    else:
+        solo_players = sorted({uname for entries in _entries_by_game(board_date).values()
+                               for _uid, uname, _s, _r, _d, _u in entries})
+        embed.add_field(name="\u200b", value="No points on the board. " + ", ".join(solo_players) + " played.", inline=False)
+    return embed
+
+
 def build_missing_embed(user_id: int) -> discord.Embed:
     """Personal daily checklist: games played today vs. still to play (with links)."""
     board_date = config.today_str()

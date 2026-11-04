@@ -1,6 +1,7 @@
 """Discord event wiring: message ingestion flow and daily board maintenance."""
 import asyncio
 import sqlite3
+from datetime import datetime, timedelta
 
 import discord
 
@@ -46,6 +47,20 @@ async def update_or_post_daily_board(channel: discord.TextChannel, board_date: s
             except discord.HTTPException as e:
                 print(f"Warning: failed to edit board message: {e}")
                 return
+
+        # First board of a new day: publish yesterday's locked wrap once, above the fresh board.
+        try:
+            yesterday = (datetime.strptime(board_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        except ValueError:
+            yesterday = None
+        if yesterday and not db.wrap_already_posted(yesterday) and db.day_has_scores(yesterday):
+            wrap = embeds.build_wrap_embed(yesterday)
+            if wrap is not None:
+                try:
+                    wrap_msg = await channel.send(embed=wrap)
+                    db.mark_wrap_posted(yesterday, wrap_msg.id)
+                except discord.HTTPException as e:
+                    print(f"Warning: failed to post day wrap: {e}")
 
         try:
             new_msg = await channel.send(embed=embed)
