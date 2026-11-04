@@ -42,6 +42,7 @@ GAME_META = {
     "Roughly": {"icon": "📏", "desc": "daily estimation duels", "url": "https://roughly.is"},
     "Magnitudle": {"icon": "📐", "desc": "size-it-up estimation rounds", "url": "https://magnitudle.com"},
     "Majority": {"icon": "🗳️", "desc": "guess what the crowd picked", "url": "https://www.majoritygame.com/"},
+    "Trivmount": {"icon": "🏔️", "desc": "12 trivia questions to the summit", "url": "https://trivmount.com/"},
 }
 
 def get_game_meta(game_name: str) -> dict:
@@ -349,6 +350,18 @@ def parse_all_games(text: str) -> list[dict]:
             "solved": 1 if maj > 0 else 0,
             "rank_score": float(-maj * 100 - sync),  # More majorities + higher sync = better
             "display_score": f"{maj}/{total} ({sync}%)",
+            "extra_url": None
+        })
+
+    # 13. TRIVMOUNT (Trivmount #40 11/12 + grid row)
+    for m in re.finditer(r"Trivmount #(\d+)\s+(\d+)/(\d+)", text):
+        pid, correct, total = m.group(1), int(m.group(2)), int(m.group(3))
+        results.append({
+            "game": "Trivmount",
+            "puzzle_id": f"#{pid}",
+            "solved": 1 if correct > 0 else 0,
+            "rank_score": float(-(correct / total) * 100) if total else 0.0,  # Higher ratio = better
+            "display_score": f"{correct}/{total}",
             "extra_url": None
         })
 
