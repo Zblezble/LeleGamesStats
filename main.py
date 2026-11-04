@@ -235,9 +235,9 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
-    # 7. GLOBLE (🌎 Nov 1, 2026 🌍 ... 🟥🟥🟩 = 3)
+    # 7. GLOBLE (🌎 Nov 1, 2026 🌍 ... N grid rows ... 🟩 = 3)
     for m in re.finditer(
-        r"[🌎🌍🌏]\s*([A-Za-z]+ \d+, \d{4})\s*[🌎🌍🌏].*?\n(?:[^\n]*\n)?[🟧🟥🟨🟩⬜⬛]+\s*=\s*(\d+)",
+        r"[🌎🌍🌏]\s*([A-Za-z]+ \d+, \d{4})\s*[🌎🌍🌏].*?\n(?:[^\n]*\n)*?[🟧🟥🟨🟩⬜⬛]+\s*=\s*(\d+)",
         text
     ):
         date_str, guesses = m.group(1), int(m.group(2))
