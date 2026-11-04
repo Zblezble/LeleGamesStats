@@ -73,7 +73,7 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
         standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
-        standings_str = " · ".join([f"{names[u]} {p}" for u, p in standings])
+        standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
         embed.add_field(name="Today's points (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt)", value=standings_str, inline=False)
 
     return embed
