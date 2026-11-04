@@ -456,15 +456,12 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
             lines.append(f"**{uname}** `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
-        meta = get_game_meta(game)
-        play = meta.get("url")
         # Clamp to Discord's 1024-char field limit so a huge game can't kill the whole board
         clamp = lambda v: v if len(v) <= 1024 else v[:1021] + "…"
         if layout == "rows":
-            value = " · ".join(lines) + (f" · [play]({play})" if play else "")
+            embed.add_field(name=field_title, value=clamp(" · ".join(lines)), inline=False)
         else:
-            value = "\n".join(lines) + (f"\n[play]({play})" if play else "")
-        embed.add_field(name=field_title, value=clamp(value), inline=(layout != "rows"))
+            embed.add_field(name=field_title, value=clamp("\n".join(lines)), inline=True)
 
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
