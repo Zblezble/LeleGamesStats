@@ -1,6 +1,8 @@
+import asyncio
 import os
 import re
 import sqlite3
+import sys
 from datetime import datetime, timezone
 import discord
 from discord import app_commands
@@ -25,6 +27,9 @@ try:
     BOT_TZ = ZoneInfo(os.environ["BOT_TZ"]) if os.getenv("BOT_TZ") else None
 except Exception:
     BOT_TZ = None  # unknown/missing tz database: fall back to server-local time
+
+# Console dump of every ingested message: `python main.py --debug` (or DEBUG_LOG=1).
+DEBUG_LOG = "--debug" in sys.argv or bool(os.getenv("DEBUG_LOG"))
 
 
 def today_str() -> str:
@@ -77,6 +82,25 @@ def get_game_icon(game_name: str) -> str:
 # solved runs score points. Stats/'win' semantics are per-parser and unchanged.
 GRADED_GAMES = {"Trivmount"}
 
+# Signatures that a message is MEANT to be a game result (share text or game URL).
+# Used to nudge when a result fails to parse, without nagging plain banter.
+RESULT_HINT_RE = re.compile(
+    r"(#(?:flagle|worldle|travle)\b|wordle\s+\d|animal #\d|redactle #\d|songless #\d"
+    r"|centumth\s|roughly\s*·|magnitudle\s*[—–-]|trivmount #\d|majority #\d"
+    r"|https?://\S*(?:flagle|worldle|teuteuf|globle|travle|metazooa|redactle|songless"
+    r"|centumth|roughly|magnitudle|majoritygame|trivmount)\S*)",
+    re.IGNORECASE
+)
+
+
+async def _self_destruct(msg: discord.Message, delay: int):
+    """Delete a bot acknowledgement after a delay so the channel stays clean."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except discord.NotFound:
+        pass
+
 
 # ================= DATABASE SETUP =================
 def init_db():
@@ -111,7 +135,32 @@ def init_db():
                 layout TEXT NOT NULL DEFAULT 'grid'
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS ingest_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                board_date TEXT,
+                user_id INTEGER,
+                user_name TEXT,
+                raw_text TEXT,
+                parsed_summary TEXT,
+                status TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
+
+
+def log_ingest(board_date: str, user_id: int, user_name: str, raw_text: str,
+               parsed_summary: str, status: str):
+    """Record every ingested message (ok or broken) — audit trail and future /undo source."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO ingest_log (board_date, user_id, user_name, raw_text, parsed_summary, status) VALUES (?, ?, ?, ?, ?, ?)",
+            (board_date, user_id, user_name, raw_text, parsed_summary, status)
+        )
+        conn.commit()
+    if DEBUG_LOG:
+        print(f"[ingest:{status}] {user_name}: {parsed_summary or raw_text[:200]}")
 
 
 # ================= REGEX PARSERS =================
@@ -571,15 +620,34 @@ async def on_message(message: discord.Message):
     if SCORE_CHANNEL_ID and message.channel.id != SCORE_CHANNEL_ID:
         return
 
+    board_date = today_str()
+    user_id = message.author.id
+    user_name = message.author.display_name
     parsed_games = parse_all_games(message.content)
+
     if not parsed_games:
+        # Result-looking text that failed to parse: log it, clean it, and say so.
+        if RESULT_HINT_RE.search(message.content):
+            log_ingest(board_date, user_id, user_name, message.content, "", "broken")
+            try:
+                await message.delete()
+            except (discord.Forbidden, discord.NotFound):
+                pass
+            ack = await message.channel.send(
+                f"**{user_name}** · that looked like a game result, but I couldn't read it. "
+                "It's in the ingest log — check the format on the game's site."
+            )
+            asyncio.create_task(_self_destruct(ack, 25))
+            return
         # Regular chat/banter message — leave it alone!
         await bot.process_commands(message)
         return
 
-    board_date = today_str()
-    user_id = message.author.id
-    user_name = message.author.display_name
+    summary = ", ".join(f"{get_game_icon(g['game'])} {g['game']}" for g in parsed_games)
+    if len(parsed_games) > 3:
+        summary = ", ".join(f"{get_game_icon(g['game'])} {g['game']}" for g in parsed_games[:3]) \
+                  + f" +{len(parsed_games) - 3} more"
+    log_ingest(board_date, user_id, user_name, message.content, summary, "ok")
 
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
@@ -607,7 +675,11 @@ async def on_message(message: discord.Message):
     except discord.NotFound:
         pass
 
-    # 2. Update the single Daily Digest Embed
+    # 2. Confirm with a short acknowledgement that self-destructs
+    ack = await message.channel.send(f"**{user_name}** · logged: {summary}")
+    asyncio.create_task(_self_destruct(ack, 10))
+
+    # 3. Update the single Daily Digest Embed
     await update_or_post_daily_board(message.channel, board_date)
 
 
