@@ -19,7 +19,15 @@ GAME_META = {
     "Magnitudle": {"icon": "📐", "desc": "size-it-up estimation rounds", "url": "https://magnitudle.com"},
     "Majority": {"icon": "🗳️", "desc": "guess what the crowd picked", "url": "https://www.majoritygame.com/"},
     "Trivmount": {"icon": "🏔️", "desc": "12 trivia questions to the summit", "url": "https://trivmount.com/"},
+    "Thursday Thirty": {"icon": "🧠", "desc": "30-question weekly quiz, Thursdays", "url": "https://t30.teuteuf.fr/",
+                        "days": {3}},  # Thursday (Monday=0) — shows in /missing on this day only
 }
+
+
+def game_available_on(name: str, weekday: int) -> bool:
+    """Scheduled games only appear on their play days in /missing (def: always available)."""
+    days = GAME_META.get(name, {}).get("days")
+    return True if days is None else weekday in days
 
 
 def get_game_meta(game_name: str) -> dict:

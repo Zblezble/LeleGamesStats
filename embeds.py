@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import discord
 
 import config
-from games import ACTIVE_GAME_META, GRADED_GAMES, get_game_icon
+from games import ACTIVE_GAME_META, GRADED_GAMES, game_available_on, get_game_icon
 
 
 def _entries_by_game(board_date: str):
@@ -162,7 +162,10 @@ def build_missing_embed(user_id: int) -> discord.Embed:
             if game.startswith(key):
                 played.setdefault(key, dscore)
 
-    missing = [k for k in ACTIVE_GAME_META if k not in played]
+    # Scheduled games (e.g. Thursday Thirty) only count as "missing" on their play days
+    weekday = datetime.strptime(board_date, "%Y-%m-%d").weekday()
+    missing = [k for k in ACTIVE_GAME_META if k not in played and game_available_on(k, weekday)]
+    available_today = sum(1 for k in ACTIVE_GAME_META if game_available_on(k, weekday))
 
     embed = discord.Embed(
         title=f"Today's checklist · {config.date_label(board_date)}",
@@ -171,7 +174,7 @@ def build_missing_embed(user_id: int) -> discord.Embed:
     if not played:
         embed.description = "Nothing logged yet. Post your results in this channel."
     elif not missing:
-        embed.description = f"All {len(ACTIVE_GAME_META)} games played today. See you tomorrow."
+        embed.description = f"All {available_today} games played today. See you tomorrow."
 
     if missing:
         lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in ACTIVE_GAME_META.items() if name in missing]

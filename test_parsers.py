@@ -126,6 +126,11 @@ CASES = [
      "Trivmount #41 ⛰️ SUMMIT\nhttps://trivmount.com/",
      [("Trivmount", "#41", 1, "12/12")]),
 
+    # --- Thursday Thirty ---
+    ("thursday thirty",
+     "I just completed Thursday Thirty Week 33!🧠 22/30 (73%)\n\n🟩🟩🟩🟥🟩🟩🟩🟩🟩🟩\n🟩🟩🟩🟩🟩🟩🟩🟥🟩🟩\n🟥🟥🟥🟩🟥🟥🟩🟥🟩🟩\n\nTake the quiz: https://t30.teuteuf.fr/",
+     [("Thursday Thirty", "Week 33", 1, "22/30 (73%)")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),

@@ -5,7 +5,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 ## What it does
 
 - Watches a designated channel for raw game result pastes.
-- Parses results for: **Wordle, Worldle, Flagle, Globle, Travle, Metazooa, Redactle, Songless, Centumth, Roughly, Magnitudle, Majority, Trivmount** (lower rank score always wins; points games like Centumth store negated scores).
+- Parses results for: **Wordle, Worldle, Flagle, Globle, Travle, Metazooa, Redactle, Songless, Centumth, Roughly, Magnitudle, Majority, Trivmount, Thursday Thirty** (T30 is weekly and only appears in `/missing` on Thursdays; pastes still count any day) (lower rank score always wins; points games like Centumth store negated scores).
 - Deletes the raw paste, confirms with a short self-destructing acknowledgement incl. current placement and daily standing (or a nudge if a result-looking paste failed to parse), and updates **one consolidated daily leaderboard embed** per day.
 - When the first board of a new day appears, publishes yesterday's locked wrap above it: final standings + day's winner (🏆). Skipped on days with no scores; posted once per date.
 - Logs every ingested message to the `ingest_log` table (raw text + parse outcome) – the audit trail for broken or troll attempts, and the data source for `/undo`. Run with `--debug` (or `DEBUG_LOG=1`) to also dump them to the console.

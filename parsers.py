@@ -311,6 +311,24 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # 14. THURSDAY THIRTY (I just completed Thursday Thirty Week 33!🧠 22/30 (73%))
+    # teuteuf weekly quiz; ratio scored, replayable any day (scheduled on Thursdays in /missing)
+    for m in re.finditer(
+        r"Thursday Thirty Week (\d+)[^\d\n]*?(\d+)/(\d+)(?:\s*\((\d+)%\))?",
+        text, re.IGNORECASE
+    ):
+        week, correct, total = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        solved = 1 if correct > 0 else 0
+        ratio = correct / total if total else 0.0
+        results.append({
+            "game": "Thursday Thirty",
+            "puzzle_id": f"Week {week}",
+            "solved": solved,
+            "rank_score": (-ratio * 100) if solved else 10000.0,
+            "display_score": f"{correct}/{total} ({int(ratio * 100)}%)",
+            "extra_url": None
+        })
+
     if config.DISABLED_GAMES:
         results = [r for r in results
                    if not any(r["game"].lower().startswith(d) for d in config.DISABLED_GAMES)]
