@@ -126,6 +126,35 @@ def remove_entries(board_date: str, game: str, puzzle_id: str, user_id: int | No
         return {"count": len(rows), "games": games_found, "puzzle_ids": pids_found, "users": users}
 
 
+def forfeit_entry(board_date: str, user_id: int, user_name: str, game_key: str):
+    """Record a manual forfeit (DNF) for games with no built-in 'give up' share text.
+    Puzzle id follows whatever other players posted today for this game, else the date.
+    Returns (puzzle_id, overwritten_entry) after upserting."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        c = conn.cursor()
+        row = c.execute(
+            "SELECT puzzle_id, game FROM scores WHERE board_date = ?"
+            " AND (game = ? COLLATE NOCASE OR game LIKE (? || ' (%') COLLATE NOCASE)"
+            " ORDER BY timestamp DESC LIMIT 1",
+            (board_date, game_key, game_key)
+        ).fetchone()
+        puzzle_id = row[0] if row else board_date
+        game = row[1] if row else game_key
+        overwritten = c.execute(
+            "SELECT 1 FROM scores WHERE board_date = ? AND game = ? AND puzzle_id = ? AND user_id = ?",
+            (board_date, game, puzzle_id, user_id)
+        ).fetchone() is not None
+        rank = 10000.0 if game_key == "Trivmount" else 999.0
+        c.execute("""
+            INSERT INTO scores (board_date, user_id, user_name, game, puzzle_id, solved, rank_score, display_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(board_date, user_id, game, puzzle_id) DO UPDATE SET
+                solved=0, rank_score=excluded.rank_score, display_score=excluded.display_score
+        """, (board_date, user_id, user_name, game, puzzle_id, 0, rank, "DNF"))
+        conn.commit()
+        return puzzle_id, bool(overwritten)
+
+
 def undo_latest_ingest(board_date: str, user_id: int):
     """Delete the scores created by the user's newest 'ok' ingest of the day and
     mark that ingest undone. Returns (parsed_summary, rows_deleted) or None."""

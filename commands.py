@@ -195,6 +195,28 @@ async def remove_entry(interaction: discord.Interaction,
     )
 
 
+@app_commands.describe(game="Game to forfeit today (global: base game names)")
+@app_commands.autocomplete(game=_game_autocomplete)
+async def forfeit(interaction: discord.Interaction, game: str):
+    key = next((k for k in ACTIVE_GAME_META if k.lower() == game.lower() or game.lower().startswith(k.lower())), None)
+    if key is None:
+        await interaction.response.send_message(
+            f"Unknown game: **{game}**. Pick one from the board.", ephemeral=True)
+        return
+
+    board_date = today_str()
+    puzzle_id, overwritten = db.forfeit_entry(board_date, interaction.user.id,
+                                              interaction.user.display_name, key)
+    db.log_ingest(board_date, interaction.user.id, interaction.user.display_name,
+                  f"/forfeit {game}", f"DNF {key} {puzzle_id}", "forfeit")
+    await handlers.update_or_post_daily_board(interaction.channel, board_date)
+    await interaction.response.send_message(
+        f"Forfeited **{key}** today · logged as DNF ({puzzle_id})."
+        + (" Your earlier entry was replaced." if overwritten else ""),
+        ephemeral=True
+    )
+
+
 async def undo(interaction: discord.Interaction):
     """Remove the scores from the caller's most recent ingest of the day."""
     result = db.undo_latest_ingest(today_str(), interaction.user.id)
@@ -254,6 +276,7 @@ def register(bot):
     bot.tree.command(name="board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")(board)
     bot.tree.command(name="missing", description="Which of today's games you still have to play")(missing)
     bot.tree.command(name="undo", description="Remove the scores from your most recent post today")(undo)
+    bot.tree.command(name="forfeit", description="Record a DNF for a game you can't finish today")(forfeit)
     bot.tree.command(name="remove", description="Remove a score entry (requires Manage Messages)")(remove_entry)
     bot.tree.command(name="games", description="List supported games with descriptions and links")(games)
     bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")(layout_switch)
