@@ -118,9 +118,22 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     return embed
 
 
+def _wrap_last_line(board_date: str, player_name: str) -> str:
+    """Gentle closing quip for the last-placed player, deterministic for a given day."""
+    quips = (
+        "{name}, you kept the others in line today. Teamwork matters.",
+        "A brave bottom-place finish by {name}. Every group needs a hero who finished.",
+        "{name} made sure silver looked especially shiny today.",
+        "Not everyone can be first. {name} found a different way to contribute.",
+        "Tomorrow has 'comeback' written all over it, {name}.",
+    )
+    return quips[sum(ord(c) for c in board_date) % len(quips)].format(name=player_name)
+
+
 def build_wrap_embed(board_date: str) -> discord.Embed | None:
-    """Locked-day wrap: final standings + day's winner. None if nobody scored."""
-    if not _entries_by_game(board_date):
+    """Locked-day wrap: turnout, game difficulty, final standings and winner's trophy."""
+    grouped = _entries_by_game(board_date)
+    if not grouped:
         return None
     mvp_points, names = compute_daily_points(board_date)
 
@@ -128,8 +141,27 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
         title=f"🏆 Yesterday's wrap · {config.date_label(board_date)}",
         color=0xF59E0B,
     )
-    if mvp_points:
-        standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
+
+    players = {uid for entries in grouped.values() for uid, *_ in entries}
+    game_names = {game for game, _pid in grouped}
+    embed.add_field(name="Turnout", value=f"{len(players)} players · {len(game_names)} games", inline=False)
+
+    # Relative daily difficulty: solve rate per game (solved / players who posted it).
+    # This is intentionally not rank_score, since units vary across games.
+    rates = []
+    for (game, _pid), entries in grouped.items():
+        total = len(entries)
+        solved = sum(1 for e in entries if e[2] == 1)
+        rates.append((game, solved, total, solved / total))
+    rates.sort(key=lambda r: (r[3], r[0]))
+    highest, lowest = max(r[3] for r in rates), min(r[3] for r in rates)
+    if highest != lowest:
+        easiest = " / ".join(f"**{r[0]}** `{r[3]:.0%}`" for r in rates if r[3] == highest)
+        hardest = " / ".join(f"**{r[0]}** `{r[3]:.0%}`" for r in rates if r[3] == lowest)
+        embed.add_field(name="Difficulty by solve rate", value=f"Easiest: {easiest}\nHardest: {hardest}", inline=False)
+
+    standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
+    if standings:
         standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
         embed.add_field(name="Final standings (🥇 3 · 🥈 2 · 🥉 1)", value=standings_str, inline=False)
 
@@ -138,8 +170,11 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
         label = " and ".join(winners)
         verb = "split" if len(winners) > 1 else "takes"
         embed.add_field(name="\u200b", value=f"🏆 {label} {verb} the day with `{best}` pts.", inline=False)
+
+        last_id, last_pts = standings[-1]
+        embed.add_field(name="\u200b", value=_wrap_last_line(board_date, names[last_id]), inline=False)
     else:
-        solo_players = sorted({uname for entries in _entries_by_game(board_date).values()
+        solo_players = sorted({uname for entries in grouped.values()
                                for _uid, uname, _s, _r, _d, _u in entries})
         embed.add_field(name="\u200b", value="No points on the board. " + ", ".join(solo_players) + " played.", inline=False)
     return embed
