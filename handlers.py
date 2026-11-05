@@ -98,6 +98,10 @@ def register(bot):
         if not parsed_games:
             # Anything without a recognizable score is ordinary chat: leave it alone,
             # including game examples in announcements and messages mentioning game names.
+            if config.DEBUG_LOG:
+                # Diagnostic only, never changes behavior: exposes the exact input string
+                # searched by the parsers, including hidden Unicode differences.
+                print(f"[ingest:unparsed] {user_name}: {message.content!r}")
             await bot.process_commands(message)
             return
 
