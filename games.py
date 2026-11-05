@@ -13,7 +13,7 @@ GAME_META = {
     "Travle": {"icon": "✈️", "desc": "connect two countries across borders", "url": "https://travle.earth/"},
     "Metazooa": {"icon": "🐾", "desc": "guess the animal from its taxonomy", "url": "https://metazooa.com"},
     "Redactle": {"icon": "████", "desc": "unredact the hidden Wikipedia article", "url": "https://redactle.net"},
-    "Songless": {"icon": "🎵", "desc": "guess songs from short clips, per genre", "url": "https://songless.app"},
+    "Songless": {"icon": "🎵", "desc": "guess songs from short clips, per genre", "url": "https://lessgames.com/songless"},
     "Centumth": {"icon": "💯", "desc": "100-question daily knowledge quiz", "url": "https://centumth.com"},
     "Roughly": {"icon": "📏", "desc": "daily estimation duels", "url": "https://roughly.is"},
     "Magnitudle": {"icon": "📐", "desc": "size-it-up estimation rounds", "url": "https://magnitudle.com"},
