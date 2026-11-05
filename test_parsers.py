@@ -131,6 +131,13 @@ CASES = [
      "I just completed Thursday Thirty Week 33!🧠 22/30 (73%)\n\n🟩🟩🟩🟥🟩🟩🟩🟩🟩🟩\n🟩🟩🟩🟩🟩🟩🟩🟥🟩🟩\n🟥🟥🟥🟩🟥🟥🟩🟥🟩🟩\n\nTake the quiz: https://t30.teuteuf.fr/",
      [("Thursday Thirty", "Week 33", 1, "22/30 (73%)")]),
 
+    ("thursday thirty newline before brain",
+     "I just completed Thursday Thirty Week 43!\n🧠 18/30 (60%)\n\n🟩🟩🟩🟥🟩🟩🟥🟩🟥🟥\n🟩🟥🟩🟩🟩🟩🟩🟩🟥🟥\n🟩🟩🟩🟥🟩🟥🟥🟩🟥🟥\n\nTake the quiz: https://t30.teuteuf.fr",
+     [("Thursday Thirty", "Week 43", 1, "18/30 (60%)")]),
+    ("thursday thirty without brain",
+     "Thursday Thirty Week 43! 18/30",
+     [("Thursday Thirty", "Week 43", 1, "18/30 (60%)")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),

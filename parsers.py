@@ -312,9 +312,11 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 14. THURSDAY THIRTY (I just completed Thursday Thirty Week 33!🧠 22/30 (73%))
-    # teuteuf weekly quiz; ratio scored, replayable any day (scheduled on Thursdays in /missing)
+    # teuteuf weekly quiz; ratio scored, replayable any day (scheduled on Thursdays in /missing).
+    # The 🧠 marker may be absent, and whitespace/newlines are allowed between
+    # the week number, the marker, and the score (real share format varies by client).
     for m in re.finditer(
-        r"Thursday Thirty Week (\d+)[^\d\n]*?(\d+)/(\d+)(?:\s*\((\d+)%\))?",
+        r"Thursday Thirty Week (\d+)(?:!|\.)?\s*🧠?\s*(\d+)/(\d+)(?:\s*\((\d+)%\))?",
         text, re.IGNORECASE
     ):
         week, correct, total = int(m.group(1)), int(m.group(2)), int(m.group(3))
