@@ -1,6 +1,4 @@
 """Game registry: icons, descriptions, links — and what's currently enabled."""
-import re
-
 import config
 
 # Base names are matched by prefix, so modes like "Roughly (Where from)"
@@ -49,13 +47,3 @@ def get_game_icon(game_name: str) -> str:
 # closeness (no elimination). All other games stay elimination-style: only
 # solved runs score points. Stats/'win' semantics are per-parser and unchanged.
 GRADED_GAMES = {"Trivmount"}
-
-# Signatures that a message is MEANT to be a game result (share text or game URL).
-# Used to nudge when a result fails to parse, without nagging plain banter.
-RESULT_HINT_RE = re.compile(
-    r"(#(?:flagle|worldle|travle)\b|wordle\s+\d|animal #\d|redactle #\d|songless #\d"
-    r"|centumth\s|roughly\s*·|magnitudle\s*[—–-]|trivmount #\d|majority #\d"
-    r"|https?://\S*(?:flagle|worldle|teuteuf|globle|travle|metazooa|redactle|songless"
-    r"|centumth|roughly|magnitudle|majoritygame|trivmount)\S*)",
-    re.IGNORECASE
-)

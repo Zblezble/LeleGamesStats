@@ -96,20 +96,8 @@ def register(bot):
         parsed_games = parsers.parse_all_games(message.content)
 
         if not parsed_games:
-            # Result-looking text that failed to parse: log it, clean it, and say so.
-            if games.RESULT_HINT_RE.search(message.content):
-                db.log_ingest(board_date, user_id, user_name, message.content, "", "broken")
-                try:
-                    await message.delete()
-                except (discord.Forbidden, discord.NotFound):
-                    pass
-                ack = await message.channel.send(
-                    f"{user_name} · that looked like a game result, but I couldn't read it. "
-                    "It's in the ingest log — check the format on the game's site."
-                )
-                asyncio.create_task(_self_destruct(ack, 25))
-                return
-            # Regular chat/banter message — leave it alone!
+            # Anything without a recognizable score is ordinary chat: leave it alone,
+            # including game examples in announcements and messages mentioning game names.
             await bot.process_commands(message)
             return
 

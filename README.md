@@ -6,9 +6,9 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 
 - Watches a designated channel for raw game result pastes.
 - Parses results for: **Wordle, Worldle, Flagle, Globle, Travle, Metazooa, Redactle, Songless, Centumth, Roughly, Magnitudle, Majority, Trivmount, Thursday Thirty** (T30 is weekly and only appears in `/missing` on Thursdays; pastes still count any day) (lower rank score always wins; points games like Centumth store negated scores).
-- Deletes the raw paste, confirms with a short self-destructing acknowledgement incl. current placement and daily standing (or a nudge if a result-looking paste failed to parse), and updates **one consolidated daily leaderboard embed** per day.
+- Deletes raw score pastes, confirms with a short self-destructing acknowledgement incl. current placement and daily standing, and updates **one consolidated daily leaderboard embed** per day. Any message without a recognized score is left untouched, including announcements and banter mentioning game names.
 - When the first board of a new day appears, publishes yesterday's locked wrap above it: final standings + day's winner (🏆). Skipped on days with no scores; posted once per date.
-- Logs every ingested message to the `ingest_log` table (raw text + parse outcome) – the audit trail for broken or troll attempts, and the data source for `/undo`. Run with `--debug` (or `DEBUG_LOG=1`) to also dump them to the console.
+- Logs every successfully parsed message to the `ingest_log` table (raw text + user) – the audit trail and data source for `/undo`. Run with `--debug` (or `DEBUG_LOG=1`) to also dump them to the console.
 - Awards daily points per game (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt, ties share placement; games with ≥2 players) plus a standings summary on the board.
 - Slash commands:
   - `/h2h <opponent> [player1]` – head-to-head record across all shared puzzles.
