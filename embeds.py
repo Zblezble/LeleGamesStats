@@ -1,4 +1,5 @@
 """Embed builders: the consolidated daily board and the personal /missing checklist."""
+import re
 import sqlite3
 from datetime import datetime, timezone
 
@@ -118,6 +119,42 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     return embed
 
 
+def _performance_fraction(game: str, solved: int, rank_score: float, display_score: str) -> float:
+    """Map one result to a roughly comparable 0..1 outcome strength, for daily difficulty.
+
+    Correct ratios ("18/30", "199/500") are used verbatim. Score-based percent
+    games follow their percentage. Other games rank by puzzle constraints:
+    first tries approach 1, guess counts reduce it. This is a heuristic for the
+    day's recap, not a universal measure of player skill.
+    """
+    dscore = (display_score or "").strip()
+    # Only genuine scoring games treat x/y as a score ratio. Wordle's 1/6 is a first try.
+    if game in {"Trivmount", "Thursday Thirty", "Songless", "Centumth", "Majority"} or game.startswith("Magnitudle"):
+        ratio = re.match(r"(\d+)/([1-9]\d*)", dscore)
+        if ratio:
+            correct, total = int(ratio.group(1)), int(ratio.group(2))
+            return max(0.0, min(1.0, correct / total))
+    if not solved:
+        return 0.0
+    if game.startswith("Roughly"):
+        return max(0.0, min(1.0, -rank_score / 100))
+    if game == "Travle":
+        return 1 / max(1.0, 1 + rank_score)
+    if game in {"Metazooa", "Globle", "Redactle"}:
+        return 1 / max(1.0, abs(rank_score))
+    # Guess-type games: tries (and hint penalties) translate through a 6-point scale.
+    return max(0.0, min(1.0, (7 - rank_score) / 6))
+
+
+def _median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    mid = len(values) // 2
+    if len(values) % 2:
+        return values[mid]
+    return (values[mid - 1] + values[mid]) / 2
+
+
 def _wrap_last_line(board_date: str, player_name: str) -> str:
     """Gentle closing quip for the last-placed player, deterministic for a given day."""
     quips = (
@@ -146,19 +183,24 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     game_names = {game for game, _pid in grouped}
     embed.add_field(name="Turnout", value=f"{len(players)} players · {len(game_names)} games", inline=False)
 
-    # Relative daily difficulty: solve rate per game (solved / players who posted it).
-    # This is intentionally not rank_score, since units vary across games.
+    # Relative daily difficulty: median normalized result quality per game.
+    # Solve flags alone cannot distinguish an easy 5/6 day from a perfect first try.
     rates = []
     for (game, _pid), entries in grouped.items():
-        total = len(entries)
-        solved = sum(1 for e in entries if e[2] == 1)
-        rates.append((game, solved, total, solved / total))
-    rates.sort(key=lambda r: (r[3], r[0]))
-    highest, lowest = max(r[3] for r in rates), min(r[3] for r in rates)
-    if highest != lowest:
-        easiest = " / ".join(f"**{r[0]}** `{r[3]:.0%}`" for r in rates if r[3] == highest)
-        hardest = " / ".join(f"**{r[0]}** `{r[3]:.0%}`" for r in rates if r[3] == lowest)
-        embed.add_field(name="Difficulty by solve rate", value=f"Easiest: {easiest}\nHardest: {hardest}", inline=False)
+        outcomes = sorted(
+            _performance_fraction(game, solved, rscore, dscore)
+            for _uid, _uname, solved, rscore, dscore, _url in entries
+        )
+        rates.append((game, _median(outcomes), len(entries)))
+    hits = [(name, pct, n) for name, pct, n in rates if pct > 0]
+    if hits:
+        highest, lowest = max(r[1] for r in hits), min(r[1] for r in hits)
+        render = lambda pct: f"`{pct:.0%}`"
+        easiest = " / ".join(f"**{r[0]}** {render(r[1])}" for r in hits if r[1] == highest)
+        hardest = " / ".join(f"**{r[0]}** {render(r[1])}" for r in hits if r[1] == lowest)
+        if highest != lowest:
+            embed.add_field(name="Game difficulty · median performance",
+                            value=f"Easiest: {easiest}\nHardest: {hardest}", inline=False)
 
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
     if standings:
