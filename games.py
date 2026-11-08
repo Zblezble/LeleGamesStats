@@ -51,8 +51,8 @@ GRADED_GAMES = {"Trivmount"}
 # Playful public acknowledgements for exact integer results. Curated static links,
 # no external image API requested. URLs were validated to serve actual GIFs.
 MEME_SCORES = {
-    42: {"caption": "The answer to everything.", "url": "https://media2.giphy.com/media/BVlWY2vMZgLG8/giphy.gif"},
-    67: {"caption": "Six seven.", "url": "https://media0.giphy.com/media/HqSBJZJJ9q40M3E35g/giphy.gif"},
-    69: {"caption": "Nice.", "url": "https://media2.giphy.com/media/49RIRSxJcITn1Gly1a/giphy.gif"},
-    420: {"caption": "Blaze it.", "url": "https://media2.giphy.com/media/iBryhpz2IScw0/giphy.gif"},
+    42: {"caption": "The answer to everything.", "url": "https://media1.tenor.com/m/T-weCEHq2BgAAAAC/life-the-universe-and-everything-hitchhikers-guide-to-the-galaxy.gif"},
+    67: {"caption": "Six seven.", "url": "https://media1.tenor.com/m/gJR-HQLJ2isAAAAd/petr-pavel-67-petr-pavel.gif"},
+    69: {"caption": "Nice.", "url": "https://media1.tenor.com/m/6vjzHxepwDkAAAAC/pout-kiss.gif"},
+    420: {"caption": "Blaze it.", "url": "https://media.tenor.com/ev8UUqNOIm0AAAAi/snoop-dogg-dance.gif"},
 }
