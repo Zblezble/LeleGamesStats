@@ -187,6 +187,9 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     # Solve flags alone cannot distinguish an easy 5/6 day from a perfect first try.
     rates = []
     for (game, _pid), entries in grouped.items():
+        # A one-person game says nothing about relative daily difficulty.
+        if len(entries) < 2:
+            continue
         outcomes = sorted(
             _performance_fraction(game, solved, rscore, dscore)
             for _uid, _uname, solved, rscore, dscore, _url in entries
@@ -205,7 +208,7 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
     if standings:
         standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
-        embed.add_field(name="Final standings (🥇 3 · 🥈 2 · 🥉 1)", value=standings_str, inline=False)
+        embed.add_field(name="Final standings", value=standings_str, inline=False)
 
         best = standings[0][1]
         winners = [names[u] for u, p in standings if p == best]
