@@ -1,4 +1,5 @@
 """Embed builders: the consolidated daily board and the personal /missing checklist."""
+import random
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -155,16 +156,55 @@ def _median(values: list[float]) -> float:
     return (values[mid - 1] + values[mid]) / 2
 
 
-def _wrap_last_line(board_date: str, player_name: str) -> str:
-    """Gentle closing quip for the last-placed player, deterministic for a given day."""
-    quips = (
-        "{name}, you kept the others in line today. Teamwork matters.",
-        "A brave bottom-place finish by {name}. Every group needs a hero who finished.",
-        "{name} made sure silver looked especially shiny today.",
-        "Not everyone can be first. {name} found a different way to contribute.",
-        "Tomorrow has 'comeback' written all over it, {name}.",
-    )
-    return quips[sum(ord(c) for c in board_date) % len(quips)].format(name=player_name)
+def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[int, int]]) -> str:
+    """One playful placement comment for the day, selected deterministically.
+
+    Targets any placement, not only winner and last. Immutable for a given day's wrap.
+    """
+    if not standings:
+        return ""
+    pool = [idx for idx in range(len(standings))]
+    idx = random.Random(f"{board_date}:placement").choice(pool)
+    uid, pts = standings[idx]
+    name = names.get(uid, "Someone")
+    last = len(standings) - 1
+
+    kinds = []
+    if idx == 0:
+        kinds.append("first")
+    if idx == 1 and len(standings) > 2:
+        kinds.append("second")
+    if idx == len(standings) - 2:
+        kinds.append("second_last")
+    if idx == last and len(standings) > 1:
+        kinds.append("last")
+    if not kinds:
+        kinds.append("middle")
+    kind = random.Random(f"{board_date}:kind").choice(kinds)
+
+    lines = {
+        "first": (
+            f"🏆 {name} takes the day with `{pts}` pts. Tiny victory dance time.",
+            f"🏆 {name} wins the day with `{pts}` pts. Rematch pending, obviously.",
+        ),
+        "second": (
+            f"{name} lands second with `{pts}` pts. Excellent hostilities resume tomorrow.",
+            f"{name}, silver today. Close enough to taste the victory snacks.",
+        ),
+        "second_last": (
+            f"{name} narrowly escapes last. That's a victory with slightly worse marketing.",
+            f"{name} finishes just above bottom. Staying out of the basement lighting the way.",
+        ),
+        "middle": (
+            f"{name} finishes at `{pts}` pts. A middle-of-the-pack diplomat.",
+            f"Not first, not last. {name} brings respectable balance to the group.",
+        ),
+        "last": (
+            f"{name} brings up the rear and keeps the group together. Teamwork matters.",
+            f"{name} finishes with `{pts}` pts. Already plotting the triumphant comeback.",
+        ),
+    }
+    return random.Random(f"{board_date}:line").choice(lines[kind])
 
 
 def build_wrap_embed(board_date: str) -> discord.Embed | None:
@@ -210,14 +250,9 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
         standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
         embed.add_field(name="Final standings", value=standings_str, inline=False)
 
-        best = standings[0][1]
-        winners = [names[u] for u, p in standings if p == best]
-        label = " and ".join(winners)
-        verb = "split" if len(winners) > 1 else "takes"
-        embed.add_field(name="\u200b", value=f"🏆 {label} {verb} the day with `{best}` pts.", inline=False)
-
-        last_id, last_pts = standings[-1]
-        embed.add_field(name="\u200b", value=_wrap_last_line(board_date, names[last_id]), inline=False)
+        # One random placement commenter for the wrap, replacing separate
+        # winner-callout and last-place fields.
+        embed.add_field(name="\u200b", value=_wrap_comment(board_date, names, standings), inline=False)
     else:
         solo_players = sorted({uname for entries in grouped.values()
                                for _uid, uname, _s, _r, _d, _u in entries})
