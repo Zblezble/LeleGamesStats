@@ -9,7 +9,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 - Deletes raw score pastes, confirms with a short self-destructing acknowledgement incl. current placement and daily standing, and updates **one consolidated daily leaderboard embed** per day. Any message without a recognized score is left untouched, including announcements and banter mentioning game names.
 - When the first board of a new day appears, publishes yesterday's locked wrap above it: player turnout, easiest/hardest games by median normalized performance, final standings, and one playful placement comment (randomly a winner, silver, mid-pack, second-last or last). Skipped on days with no scores; posted once per date.
 - Logs every successfully parsed message to the `ingest_log` table (raw text + user) – the audit trail and data source for `/undo`. Run with `--debug` (or `DEBUG_LOG=1`) to also dump them to the console.
-- Easter egg: exact integer results of `42`, `67`, `69`, or `420` get a public, curated gif reaction (one per person per day per number, no puzzle ids or dates). Any broken/unformatted score text stays untouched.
+- Easter egg: exact integer results of `42`, `67`, `69`, or `420` get a public, curated gif reaction (de-duplicated per paste, ignoring puzzle ids and dates). Any broken/unformatted score text stays untouched.
 - Awards daily points per game (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt, ties share placement; games with ≥2 players) plus a standings summary on the board.
 - Slash commands:
   - `/h2h <opponent> [player1]` – head-to-head record across all shared puzzles.
