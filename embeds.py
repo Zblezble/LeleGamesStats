@@ -186,22 +186,34 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
         "first": (
             f"🏆 {name} takes the day with `{pts}` pts. Tiny victory dance time.",
             f"🏆 {name} wins the day with `{pts}` pts. Rematch pending, obviously.",
+            f"🏆 {name} holds the crown with `{pts}` pts. What an entirely planned outcome.",
+            f"🏆 {name}, today's champion. And they said casual gaming couldn't get serious.",
         ),
         "second": (
             f"{name} lands second with `{pts}` pts. Excellent hostilities resume tomorrow.",
             f"{name}, silver today. Close enough to taste the victory snacks.",
+            f"{name} finishes second with `{pts}` pts. One tiny rematch from a narrative correction.",
+            f"{name}, one spot short of glory and one *rematch* from fixing it.",
         ),
         "second_last": (
             f"{name} narrowly escapes last. That's a victory with slightly worse marketing.",
             f"{name} finishes just above bottom. Staying out of the basement lighting the way.",
+            f"{name} avoided the basement by a whisker. Not quite last, oddly satisfying.",
+            f"{name}, this close to last but separated by the luxurious distinction of one other person.",
         ),
         "middle": (
             f"{name} finishes at `{pts}` pts. A middle-of-the-pack diplomat.",
             f"Not first, not last. {name} brings respectable balance to the group.",
+            f"{name} gets no medal ceremony today, just the quiet promise of future escalation.",
+            f"{name} finished mid-pack with `{pts}` pts. Close enough to the summit to hear the laughter.",
         ),
         "last": (
+            "Not everyone can be first. {name} found a different way to contribute.",
+            "A brave bottom-place finish by {name}. Every group needs a hero who finished.",
             f"{name} brings up the rear and keeps the group together. Teamwork matters.",
             f"{name} finishes with `{pts}` pts. Already plotting the triumphant comeback.",
+            f"{name} accepted the wooden spoon with grace and an inconvenient rematch request.",
+            f"{name} has truly mastered the art of giving everyone else a confidence boost.",
         ),
     }
     return random.Random(f"{board_date}:line").choice(lines[kind])
