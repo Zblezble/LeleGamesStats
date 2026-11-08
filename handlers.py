@@ -12,6 +12,21 @@ import games
 import parsers
 
 
+def _meme_numbers(parsed_games: list[dict]) -> list[int]:
+    """Exact integral scores with curated gifs, in stable order, no repeats.
+
+    Uses the result itself (points, guesses), never a puzzle id/date or rounded scores.
+    """
+    hits = set()
+    for result in parsed_games:
+        score = result.get("rank_score", 0.0)
+        if isinstance(score, (int, float)) and score.is_integer():
+            special = abs(int(score))
+            if special in games.MEME_SCORES:
+                hits.add(special)
+    return sorted(hits)
+
+
 async def _self_destruct(msg: discord.Message, delay: int):
     """Delete a bot acknowledgement after a delay so the channel stays clean."""
     await asyncio.sleep(delay)
@@ -157,6 +172,16 @@ def register(bot):
 
         ack = await message.channel.send("\n".join(lines))
         asyncio.create_task(_self_destruct(ack, 12))
+
+        # Easter egg for exact virtual scores. Public, doesn't replace the acknowledgement.
+        for special in _meme_numbers(parsed_games):
+            effect = games.MEME_SCORES[special]
+            try:
+                gif = discord.Embed(description=f"{user_name} · {special} · {effect['caption']}")
+                gif.set_image(url=effect["url"])
+                await message.channel.send(embed=gif)
+            except discord.HTTPException as e:
+                print(f"Warning: failed to post gif for {special}: {e}")
 
     bot.add_listener(on_ready, "on_ready")
     bot.add_listener(on_message, "on_message")
