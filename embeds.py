@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import discord
 
 import config
-from games import ACTIVE_GAME_META, GRADED_GAMES, game_available_on, get_game_icon
+from games import ACTIVE_GAME_META, DIFFICULTY_GAMES, GRADED_GAMES, game_available_on, get_game_icon
 
 
 def _entries_by_game(board_date: str):
@@ -159,6 +159,26 @@ def _median(values: list[float]) -> float:
     return (values[mid - 1] + values[mid]) / 2
 
 
+def _difficulty_comment(board_date: str, level: str, candidates: list[str]) -> str:
+    """A playful difficulty verdict for a day, using no opaque cross-game percentages."""
+    name = random.Random(f"{board_date}:{level}:game").choice(candidates)
+    lines = {
+        "easiest": (
+            f"Easiest: **{name}**, also known as free points.",
+            f"Easiest: **{name}**, the group has figured this one out.",
+            f"Easiest: **{name}**, today's official confidence booster.",
+            f"Easiest: **{name}** was a warm welcome, in puzzle form.",
+        ),
+        "hardest": (
+            f"Hardest: **{name}**. The silence after the answers was notable.",
+            f"Hardest: **{name}**, today's tiny derailment.",
+            f"Hardest: **{name}** made a few people quietly strengthen their stance in life.",
+            f"Hardest: **{name}** took lunch money and half the afternoon.",
+        ),
+    }
+    return random.Random(f"{board_date}:{level}:line").choice(lines[level])
+
+
 def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[int, int]]) -> str:
     """One playful placement comment for the day, selected deterministically.
 
@@ -242,8 +262,9 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     # Solve flags alone cannot distinguish an easy 5/6 day from a perfect first try.
     rates = []
     for (game, _pid), entries in grouped.items():
-        # A one-person game says nothing about relative daily difficulty.
-        if len(entries) < 2:
+        # A one-person game says nothing about relative daily difficulty, and
+        # incomparable score systems do not belong in a cross-game difficulty race.
+        if len(entries) < 2 or game not in DIFFICULTY_GAMES:
             continue
         outcomes = sorted(
             _performance_fraction(game, solved, rscore, dscore)
@@ -253,12 +274,15 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     hits = [(name, pct, n) for name, pct, n in rates if pct > 0]
     if hits:
         highest, lowest = max(r[1] for r in hits), min(r[1] for r in hits)
-        render = lambda pct: f"`{pct:.0%}`"
-        easiest = " / ".join(f"**{r[0]}** {render(r[1])}" for r in hits if r[1] == highest)
-        hardest = " / ".join(f"**{r[0]}** {render(r[1])}" for r in hits if r[1] == lowest)
         if highest != lowest:
-            embed.add_field(name="Game difficulty · median performance",
-                            value=f"Easiest: {easiest}\nHardest: {hardest}", inline=False)
+            easiest_games = [r[0] for r in hits if r[1] == highest]
+            hardest_games = [r[0] for r in hits if r[1] == lowest]
+            embed.add_field(
+                name="Game difficulty",
+                value=f"{_difficulty_comment(board_date, 'easiest', easiest_games)}\n"
+                      f"{_difficulty_comment(board_date, 'hardest', hardest_games)}",
+                inline=False,
+            )
 
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
     if standings:

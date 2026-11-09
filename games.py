@@ -52,6 +52,15 @@ GRADED_GAMES = {"Trivmount"}
 
 # Playful public acknowledgements for exact integer results. Curated static links,
 # no external image API requested. URLs were validated to serve actual GIFs.
+# Curated set of comparable games for cross-game daily difficulty.
+# Open-ended guessing games (Redactle, Metazooa, Globle, Travle, Roughly) are
+# excluded because their native scores are not comparable to a 6-try puzzle:
+# 40 guesses is a perfectly normal Redactle, not the hardest game ever.
+DIFFICULTY_GAMES = {
+    "Wordle", "Worldle", "Flagle", "Regionle", "Trivmount",
+    "Thursday Thirty", "Songless", "Songspot", "Centumth", "Majority", "Magnitudle",
+}
+
 MEME_SCORES = {
     42: {"caption": "The answer to everything.", "url": "https://media1.tenor.com/m/T-weCEHq2BgAAAAC/life-the-universe-and-everything-hitchhikers-guide-to-the-galaxy.gif"},
     67: {"caption": "Six seven.", "url": "https://media1.tenor.com/m/gJR-HQLJ2isAAAAd/petr-pavel-67-petr-pavel.gif"},
