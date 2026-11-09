@@ -177,9 +177,9 @@ def register(bot):
         for special in _meme_numbers(parsed_games):
             effect = games.MEME_SCORES[special]
             try:
-                gif = discord.Embed(description=f"{user_name} · {special} · {effect['caption']}")
-                gif.set_image(url=effect["url"])
-                await message.channel.send(embed=gif)
+                # Direct URL lets Discord own the preview, rather than relying on a
+                # custom embed's externally-fetched image being rendered.
+                await message.channel.send(f"{user_name} · {special} · {effect['caption']}\n{effect['url']}")
             except discord.HTTPException as e:
                 print(f"Warning: failed to post gif for {special}: {e}")
 
