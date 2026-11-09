@@ -331,6 +331,30 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # 15. SONGSPOT (songspot · Daily Challenge · Nov 9, 2026)
+    for m in re.finditer(
+        r"songspot\s*[·•\-]\s*Daily Challenge\s*[·•\-]\s*([A-Za-z]+ \d{1,2}, \d{4})"
+        r"\s*\n\s*(\d+)/(\d+)\s*[·•]\s*([\d,]+)\s*/\s*([\d,]+)\s*pts",
+        text, re.IGNORECASE
+    ):
+        date_str, known, total = m.group(1), int(m.group(2)), int(m.group(3))
+        pts_text, max_pts = m.group(4), m.group(5)
+        pts = int(pts_text.replace(",", ""))
+        max_pts_num = int(max_pts.replace(",", ""))
+        solved = 1 if known > 0 else 0
+        # Songs known drives placement; points are only the tiebreaker.
+        rank_score = -(known / total) * 100 if solved else 10000.0
+        if max_pts_num:
+            rank_score -= (pts / max_pts_num) * 0.001
+        results.append({
+            "game": "Songspot",
+            "puzzle_id": date_str,
+            "solved": solved,
+            "rank_score": rank_score,
+            "display_score": f"{known}/{total} · {pts_text} pts",
+            "extra_url": None
+        })
+
     if config.DISABLED_GAMES:
         results = [r for r in results
                    if not any(r["game"].lower().startswith(d) for d in config.DISABLED_GAMES)]

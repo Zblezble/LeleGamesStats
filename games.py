@@ -19,6 +19,7 @@ GAME_META = {
     "Trivmount": {"icon": "🏔️", "desc": "12 trivia questions to the summit", "url": "https://trivmount.com/"},
     "Thursday Thirty": {"icon": "🧠", "desc": "30-question weekly quiz, Thursdays", "url": "https://t30.teuteuf.fr/",
                         "days": {3}},  # Thursday (Monday=0) — shows in /missing on this day only
+    "Songspot": {"icon": "🎧", "desc": "guess 5 songs for daily points", "url": "https://songspot.co/daily"},
 }
 
 

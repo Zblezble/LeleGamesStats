@@ -138,6 +138,11 @@ CASES = [
      "Thursday Thirty Week 43! 18/30",
      [("Thursday Thirty", "Week 43", 1, "18/30 (60%)")]),
 
+    # --- Songspot ---
+    ("songspot",
+     "songspot · Daily Challenge · Nov 9, 2026\n4/5 · 3,450 / 6,000 pts\n✓ ✓ × ✓ ✓\nI knew 4 of 5. How many do you know?\nhttps://songspot.co/daily\n#songspot",
+     [("Songspot", "Nov 9, 2026", 1, "4/5 · 3,450 pts")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),
