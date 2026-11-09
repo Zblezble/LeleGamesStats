@@ -143,6 +143,14 @@ CASES = [
      "songspot · Daily Challenge · Nov 9, 2026\n4/5 · 3,450 / 6,000 pts\n✓ ✓ × ✓ ✓\nI knew 4 of 5. How many do you know?\nhttps://songspot.co/daily\n#songspot",
      [("Songspot", "Nov 9, 2026", 1, "4/5 · 3,450 pts")]),
 
+    # --- Regionle ---
+    ("regionle solved",
+     "Regionle #143 4/7\n⬛⬛⬛⬛⬛⬛⬛\n🟨⬛🟨🟨⬛🟩⬛\n⬛⬛⬛⬛⬛🟩⬛\n🟩🟩🟩🟩🟩🟩🟩\nhttps://regionle.io/",
+     [("Regionle", "#143", 1, "4/7")]),
+    ("regionle failed",
+     "Regionle #143 X/7\n⬛⬛⬛⬛⬛⬛⬛\nhttps://regionle.io/",
+     [("Regionle", "#143", 0, "X/7")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),

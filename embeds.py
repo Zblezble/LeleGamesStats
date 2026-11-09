@@ -143,6 +143,8 @@ def _performance_fraction(game: str, solved: int, rank_score: float, display_sco
         return 1 / max(1.0, 1 + rank_score)
     if game in {"Metazooa", "Globle", "Redactle"}:
         return 1 / max(1.0, abs(rank_score))
+    if game == "Regionle":
+        return max(0.0, min(1.0, (1 - (rank_score - 1) / 7)))
     # Guess-type games: tries (and hint penalties) translate through a 6-point scale.
     return max(0.0, min(1.0, (7 - rank_score) / 6))
 

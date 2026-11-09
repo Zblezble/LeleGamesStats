@@ -20,6 +20,7 @@ GAME_META = {
     "Thursday Thirty": {"icon": "🧠", "desc": "30-question weekly quiz, Thursdays", "url": "https://t30.teuteuf.fr/",
                         "days": {3}},  # Thursday (Monday=0) — shows in /missing on this day only
     "Songspot": {"icon": "🎧", "desc": "guess 5 songs for daily points", "url": "https://songspot.co/daily"},
+    "Regionle": {"icon": "🧭", "desc": "find the mystery region in 7 guesses", "url": "https://regionle.io/"},
 }
 
 

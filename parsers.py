@@ -355,6 +355,20 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # 16. REGIONLE (Regionle #143 4/7, seven colored grid rows)
+    for m in re.finditer(r"Regionle #(\d+)\s+([1-7X])/7", text, re.IGNORECASE):
+        pid, score_ch = m.group(1), m.group(2).upper()
+        solved = 0 if score_ch == "X" else 1
+        tries = int(score_ch) if solved else 99
+        results.append({
+            "game": "Regionle",
+            "puzzle_id": f"#{pid}",
+            "solved": solved,
+            "rank_score": float(tries),
+            "display_score": f"{score_ch}/7",
+            "extra_url": None
+        })
+
     if config.DISABLED_GAMES:
         results = [r for r in results
                    if not any(r["game"].lower().startswith(d) for d in config.DISABLED_GAMES)]
