@@ -151,6 +151,10 @@ CASES = [
      "Regionle #143 X/7\n⬛⬛⬛⬛⬛⬛⬛\nhttps://regionle.io/",
      [("Regionle", "#143", 0, "X/7")]),
 
+    ("roughly all-round symbol grid, not just best",
+     "roughly · How big? #77\nHow wide is a giant Pacific octopus, arm tip to arm tip?\nMe: better than 99% of players\n▧■▣■■\n\nCan you beat me?\nhttps://roughly.is/d/cqsdamg898",
+     [("Roughly (How big)", "#77", 1, "~79% (5 rounds)")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),

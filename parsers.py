@@ -183,6 +183,10 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 8. ROUGHLY (roughly · Where from? #306 ... Me: better than 97% of players ... https://roughly.is/d/xxxx)
+    # The headline percentage is the best round only. The symbol grid gives all rounds:
+    # □ <30%, ▧ 30-59%, ▣ 60-84%, ■ 85%+. The game itself doesn't publish
+    # a numeric score in this share text, so estimate it from tier midpoints.
+    ROUGHLY_TIER_SCORES = {"□": 0.15, "▧": 0.45, "▣": 0.725, "■": 0.925}
     for m in re.finditer(
         r"roughly\s*·\s*([^\n#]+)#(\d+)\s*\n([^\n]+)\nMe:\s*better than (\d+)% of players(?:.*?(https://roughly\.is/d/[a-zA-Z0-9]+))?",
         text, re.DOTALL
@@ -191,12 +195,18 @@ def parse_all_games(text: str) -> list[dict]:
         pid = m.group(2)
         pct = int(m.group(4))
         duel_url = m.group(5)
+        score = float(pct)
+        display = f"Top {100 - pct}% ({pct}%)"
+        if grid_match := re.search(r"(?:^|\n)\s*([□▧▣■]{2,})\s*(?:\n|$)", text):
+            tiers = [ROUGHLY_TIER_SCORES[s] for s in grid_match.group(1)]
+            score = sum(tiers) / len(tiers)
+            display = f"~{score:.0%} ({len(tiers)} rounds)"
         results.append({
             "game": f"Roughly ({submode})",
             "puzzle_id": f"#{pid}",
             "solved": 1,
-            "rank_score": float(-pct),  # Higher % = better
-            "display_score": f"Top {100 - pct}% ({pct}%)",
+            "rank_score": -score * 100,
+            "display_score": display,
             "extra_url": duel_url
         })
 
