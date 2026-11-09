@@ -36,6 +36,28 @@ async def _self_destruct(msg: discord.Message, delay: int):
         pass
 
 
+async def _pin_new_daily_board(channel: discord.TextChannel, board_date: str, message: discord.Message):
+    """Pin a fresh daily digest and unpin older digests in the same channel only."""
+    try:
+        await message.pin()
+    except discord.HTTPException as e:
+        print(f"Warning: could not pin board {board_date}: {e}")
+
+    with sqlite3.connect(config.DB_PATH) as conn:
+        old_boards = conn.execute(
+            "SELECT board_date, message_id FROM daily_boards WHERE channel_id = ? AND board_date != ?",
+            (channel.id, board_date)
+        ).fetchall()
+    for old_date, message_id in old_boards:
+        try:
+            older = await channel.fetch_message(message_id)
+            await older.unpin()
+        except discord.NotFound:
+            pass  # Board was already deleted.
+        except discord.HTTPException as e:
+            print(f"Warning: could not unpin older board {old_date}: {e}")
+
+
 async def update_or_post_daily_board(channel: discord.TextChannel, board_date: str):
     """Edits today's existing summary Embed, or posts a new one if none exists yet."""
     with sqlite3.connect(config.DB_PATH) as conn:
@@ -87,6 +109,7 @@ async def update_or_post_daily_board(channel: discord.TextChannel, board_date: s
             (board_date, channel.id, new_msg.id)
         )
         conn.commit()
+        await _pin_new_daily_board(channel, board_date, new_msg)
 
 
 def register(bot):
