@@ -100,7 +100,8 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
         icon = get_game_icon(game)
         lines = []
         for uid, uname, solved, rscore, dscore, url in entries:
-            duel_str = f" · [rematch]({url})" if url else ""
+            # Roughly duel invitations aren't shown on the shared daily board.
+            duel_str = f" · [rematch]({url})" if url and not game.startswith("Roughly") else ""
             lines.append(f"{uname} `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
