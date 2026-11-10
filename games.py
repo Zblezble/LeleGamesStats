@@ -58,7 +58,7 @@ GRADED_GAMES = {"Trivmount"}
 # excluded because their native scores are not comparable to a 6-try puzzle:
 # 40 guesses is a perfectly normal Redactle, not the hardest game ever.
 DIFFICULTY_GAMES = {
-    "Wordle", "Worldle", "Flagle", "Regionle", "Trivmount",
+    "Wordle", "Worldle", "Flagle", "Regionle", "Mathle", "Trivmount",
     "Thursday Thirty", "Songless", "Songspot", "Centumth", "Majority", "Magnitudle",
 }
 
