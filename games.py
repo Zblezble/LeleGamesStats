@@ -21,6 +21,7 @@ GAME_META = {
                         "days": {3}},  # Thursday (Monday=0) — shows in /missing on this day only
     "Songspot": {"icon": "🎧", "desc": "guess 5 songs for daily points", "url": "https://songspot.co/daily"},
     "Regionle": {"icon": "🧭", "desc": "find the mystery region in 7 guesses", "url": "https://regionle.io/"},
+    "Mathle": {"icon": "➗", "desc": "find the hidden equation in 6 tries", "url": "https://wordle.global/en/mathle"},
 }
 
 
