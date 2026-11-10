@@ -1,5 +1,6 @@
 """Discord event wiring: message ingestion flow and daily board maintenance."""
 import asyncio
+import random
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -25,6 +26,17 @@ def _meme_numbers(parsed_games: list[dict]) -> list[int]:
             if special in games.MEME_SCORES:
                 hits.add(special)
     return sorted(hits)
+
+
+def _prison_comment(board_date: str, user_name: str, game: str) -> str:
+    options = (
+        f"🚔 {user_name} hit a first-try win on **{game}**. How incredibly convenient. Your daily points will be held for questioning.",
+        f"{user_name}, our random-number compliance officer has detected **{game}** on the first attempt. Today’s points are gone. To jail. No get-out-jail-free cards.",
+        f"A first guess, a perfect hit, zero total points for the day. {user_name}, prison really makes you think about what you have done. Do some more puzzles while you're there.",
+        f"Congratulations to {user_name} for the least suspicious first-try **{game}** result in recorded human history. Your judgment: 0 points for today. Go directly to jail.",
+        f"The bot, an entity that definitely cheats too, accuses {user_name} of cheating. **{game}** first try. Jail for you, 0 daily points for me.",
+    )
+    return random.Random(f"prison:{board_date}:{user_name}").choice(options)
 
 
 async def _self_destruct(msg: discord.Message, delay: int):
@@ -176,6 +188,14 @@ def register(bot):
         except discord.NotFound:
             pass
 
+        # Sentence first-attempt win games, but never strip the underlying result.
+        jail_game = None
+        if config.PRISON_ENABLED:
+            for result in parsed_games:
+                if games.is_first_try(result) and db.add_prisoner(board_date, user_id, user_name, result["game"]):
+                    jail_game = result["game"]
+                    break  # One public sentence per player per day, not per replay
+
         # 2. Update the single Daily Digest Embed
         await update_or_post_daily_board(message.channel, board_date)
 
@@ -187,14 +207,21 @@ def register(bot):
                               f"{games.get_game_icon(g['game'])} **{g['game']}** DNF")
         lines = [f"{user_name} · logged: " + " · ".join(placements)]
 
-        mvp_points, names = embeds.compute_daily_points(board_date)
-        if names and user_id in mvp_points:
-            standing = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
-            pos = [i + 1 for i, (u, _) in enumerate(standing) if u == user_id][0]
-            lines.append(f"Daily: {pos}. · `{mvp_points[user_id]} pts`")
+        if config.PRISON_ENABLED and db.is_jailed(board_date, user_id):
+            lines.append("Daily: in prison · 0 pts")
+        else:
+            mvp_points, names = embeds.compute_daily_points(board_date)
+            if names and user_id in mvp_points:
+                standing = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
+                pos = [i + 1 for i, (u, _) in enumerate(standing) if u == user_id][0]
+                lines.append(f"Daily: {pos}. · `{mvp_points[user_id]} pts`")
 
         ack = await message.channel.send("\n".join(lines))
         asyncio.create_task(_self_destruct(ack, 12))
+
+        if jail_game:
+            # Public and persistent, like Monopoly. Lucky first try unlike ranking exonerations.
+            await message.channel.send(_prison_comment(board_date, user_name, jail_game))
 
         # Easter egg for exact virtual scores. Public, doesn't replace the acknowledgement.
         for special in _meme_numbers(parsed_games):

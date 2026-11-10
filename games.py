@@ -63,6 +63,22 @@ DIFFICULTY_GAMES = {
     "Thursday Thirty", "Songless", "Songspot", "Centumth", "Majority", "Magnitudle",
 }
 
+# First-guess games where hitting on attempt #1 triggers the optional prison mechanic.
+# Only native parsed scores from genuine posts are considered; /forfeit cannot enter.
+PRISON_GAMES = {"Globle", "Regionle", "Metazooa", "Redactle", "Flagle"}
+
+
+def is_first_try(result: dict) -> bool:
+    """Detect a first-attempt win in an eligible game, tolerating Flagle bonuses."""
+    if not result.get("solved") or result.get("game") not in PRISON_GAMES:
+        return False
+    rank = result.get("rank_score")
+    if not isinstance(rank, (int, float)):
+        return False
+    if result["game"] == "Flagle":
+        return rank <= 1.0  # First try = 1.0; bonus tiles may subtract more
+    return abs(rank - 1.0) < 1e-6
+
 MEME_SCORES = {
     42: {"caption": "The answer to everything.", "url": "https://media1.tenor.com/m/T-weCEHq2BgAAAAC/life-the-universe-and-everything-hitchhikers-guide-to-the-galaxy.gif"},
     67: {"caption": "Six seven.", "url": "https://media1.tenor.com/m/gJR-HQLJ2isAAAAd/petr-pavel-67-petr-pavel.gif"},

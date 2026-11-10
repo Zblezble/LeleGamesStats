@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import discord
 
 import config
+import db
 from games import ACTIVE_GAME_META, DIFFICULTY_GAMES, GRADED_GAMES, game_available_on, get_game_icon
 
 
@@ -50,6 +51,13 @@ def compute_daily_points(board_date: str):
     grouped = _entries_by_game(board_date)
     mvp_points = {}
     names = {}
+    # Voluntary anti-luck rule: record the sentence, not erase the result.
+    # Jailed players may still rank per game, but their daily total is exactly zero.
+    jailed = db.jailed_users(board_date) if config.PRISON_ENABLED else {}
+    for uid, uname in jailed.items():
+        mvp_points[uid] = 0.0
+        names[uid] = uname
+
     for (game, _pid), entries in grouped.items():
         graded = game in GRADED_GAMES
         pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
@@ -59,7 +67,7 @@ def compute_daily_points(board_date: str):
             if competes:
                 names[uid] = uname
                 rank_idx = unique_scores.index(rscore)
-                if len(entries) >= 2 and rank_idx < 3:
+                if uid not in jailed and len(entries) >= 2 and rank_idx < 3:
                     mvp_points[uid] = mvp_points.get(uid, 0) + (3 - rank_idx)
     return mvp_points, names
 

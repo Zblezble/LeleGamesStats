@@ -55,7 +55,23 @@ def init_db():
                 message_id INTEGER
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS prisoners (
+                board_date TEXT,
+                user_id INTEGER,
+                user_name TEXT,
+                prison_reason TEXT,
+                UNIQUE(board_date, user_id)
+            )
+        """)
         conn.commit()
+
+        # Migration for existing deployments: scores.ingest_id links a stored
+        # result to the ingest_log row that created it (powers /undo).
+        cols = {r[1] for r in c.execute("PRAGMA table_info(scores)").fetchall()}
+        if "ingest_id" not in cols:
+            c.execute("ALTER TABLE scores ADD COLUMN ingest_id INTEGER")
+            conn.commit()
 
 
 def wrap_already_posted(board_date: str) -> bool:
@@ -74,12 +90,27 @@ def day_has_scores(board_date: str) -> bool:
     with sqlite3.connect(config.DB_PATH) as conn:
         return conn.execute("SELECT 1 FROM scores WHERE board_date = ? LIMIT 1", (board_date,)).fetchone() is not None
 
-        # Migration for existing deployments: scores.ingest_id links a stored
-        # result to the ingest_log row that created it (powers /undo).
-        cols = {r[1] for r in c.execute("PRAGMA table_info(scores)").fetchall()}
-        if "ingest_id" not in cols:
-            c.execute("ALTER TABLE scores ADD COLUMN ingest_id INTEGER")
-            conn.commit()
+
+def add_prisoner(board_date: str, user_id: int, user_name: str, game: str) -> bool:
+    """Jail this player for the day. Returns True only for the first jail sentence today."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        c = conn.execute(
+            "INSERT OR IGNORE INTO prisoners (board_date, user_id, user_name, prison_reason) VALUES (?, ?, ?, ?)",
+            (board_date, user_id, user_name, f"First-attempt win on {game}")
+        )
+        conn.commit()
+        return c.rowcount > 0
+
+
+def jailed_users(board_date: str) -> dict[int, str]:
+    """Map of user ids permanently jailed for this day to display names."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        return dict(conn.execute("SELECT user_id, user_name FROM prisoners WHERE board_date = ?", (board_date,)).fetchall())
+
+
+def is_jailed(board_date: str, user_id: int) -> bool:
+    with sqlite3.connect(config.DB_PATH) as conn:
+        return conn.execute("SELECT 1 FROM prisoners WHERE board_date = ? AND user_id = ?", (board_date, user_id)).fetchone() is not None
 
 
 def log_ingest(board_date: str, user_id: int, user_name: str, raw_text: str,

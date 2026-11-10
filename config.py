@@ -29,6 +29,10 @@ except Exception:
 # Console dump of every ingested message: `python main.py --debug` (or DEBUG_LOG=1).
 DEBUG_LOG = "--debug" in sys.argv or bool(os.getenv("DEBUG_LOG"))
 
+# Optional anti-luck mode: suspicious first-guess wins confiscate daily points.
+# Set PRISON_ENABLED=1/true/yes/on to activate. Off by default as an easter egg.
+PRISON_ENABLED = os.getenv("PRISON_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 def today_str() -> str:
     now = datetime.now(BOT_TZ) if BOT_TZ else datetime.now()

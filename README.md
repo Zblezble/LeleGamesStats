@@ -43,6 +43,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
    | `SCORE_CHANNEL_ID`  | no       | Channel to watch. If unset, watches all.     |
    | `BOT_TZ`            | no       | Timezone for the daily cutoff, e.g. `Europe/Warsaw`. Defaults to server-local time. |
    | `DISABLED_GAMES`    | no       | Comma-separated games to turn off, e.g. `Wordle`. Hidden from the board, `/games` and `/missing`; on by default. |
+   | `PRISON_ENABLED`    | no       | `1` to enable first-attempt prison on Globle, Regionle, Metazooa, Redactle, and Flagle. Jailed players stay on the leaderboard but earn no points that day. Opt-in, disabled by default. |
 
 4. Run:
 
@@ -56,7 +57,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 
 ```
 main.py       → entry point: bot instance + wiring only
-config.py     → env vars (token, channel, BOT_TZ, DISABLED_GAMES, DEBUG_LOG), date helpers
+config.py     → env vars (token, channel, BOT_TZ, DISABLED_GAMES, PRISON_ENABLED, DEBUG_LOG), date helpers
 games.py      → game registry (icons/links/descriptions), GRADED_GAMES, result-hint regex
 db.py         → SQLite schema + ingest log
 parsers.py    → parse_all_games: one share-text -> result dicts (the file that grows per game)
