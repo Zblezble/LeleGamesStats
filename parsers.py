@@ -393,6 +393,22 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # 18. HISTORY IN ORDER (History in Order №214 · 6/6 + timeline grid)
+    for m in re.finditer(
+        r"History in Order\s+(?:№|#)\s*(\d+)\s*(?:[·•]\s*)?(\d+)\s*/\s*(\d+)",
+        text, re.IGNORECASE
+    ):
+        pid, placed, total = m.group(1), int(m.group(2)), int(m.group(3))
+        solved = 1 if total > 0 and placed == total else 0
+        results.append({
+            "game": "History in Order",
+            "puzzle_id": f"#{pid}",
+            "solved": solved,
+            "rank_score": float(placed) if solved else 99.0,
+            "display_score": f"{placed}/{total}",
+            "extra_url": None
+        })
+
     if config.DISABLED_GAMES:
         results = [r for r in results
                    if not any(r["game"].lower().startswith(d) for d in config.DISABLED_GAMES)]

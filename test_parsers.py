@@ -163,6 +163,14 @@ CASES = [
      "Mathle №214 X/6\nhttps://wordle.global/en/mathle",
      [("Mathle", "#214", 0, "X/6")]),
 
+    # --- History in Order ---
+    ("history in order",
+     "History in Order №214 · 6/6\n🟩🟩🟩🟩🟩🟩\n\nhttps://wordle.global/p/1jMZbRM0Db0",
+     [("History in Order", "#214", 1, "6/6")]),
+    ("history in order incomplete",
+     "History in Order №214 · 4/6",
+     [("History in Order", "#214", 0, "4/6")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),

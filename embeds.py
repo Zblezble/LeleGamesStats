@@ -131,7 +131,7 @@ def _performance_fraction(game: str, solved: int, rank_score: float, display_sco
     """
     dscore = (display_score or "").strip()
     # Only genuine scoring games treat x/y as a score ratio. Wordle's 1/6 is a first try.
-    if game in {"Trivmount", "Thursday Thirty", "Songless", "Centumth", "Majority", "Songspot"} or game.startswith("Magnitudle"):
+    if game in {"Trivmount", "Thursday Thirty", "Songless", "Centumth", "Majority", "Songspot", "History in Order"} or game.startswith("Magnitudle"):
         ratio = re.match(r"(\d+)/([1-9]\d*)", dscore)
         if ratio:
             correct, total = int(ratio.group(1)), int(ratio.group(2))
