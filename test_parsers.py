@@ -171,6 +171,14 @@ CASES = [
      "History in Order №214 · 4/6",
      [("History in Order", "#214", 0, "4/6")]),
 
+    # --- Tradle ---
+    ("tradle solved",
+     "#Tradle #1710 3/6\n🟩🟩🟩🟩⬜\n🟩🟩🟩🟩🟨\n🟩🟩🟩🟩🟩\nhttps://tradle.net/",
+     [("Tradle", "#1710", 1, "3/6")]),
+    ("tradle failed",
+     "#Tradle #1710 X/6\n⬜🟨🟩🟨🟪🟪\nhttps://tradle.net/",
+     [("Tradle", "#1710", 0, "X/6")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),

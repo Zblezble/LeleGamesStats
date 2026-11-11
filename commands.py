@@ -116,6 +116,8 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
 
 
 async def board(interaction: discord.Interaction):
+    # Acknowledge immediately: reposting can take longer than Discord's 3s initial timeout.
+    await interaction.response.defer(ephemeral=True)
     board_date = today_str()
     with sqlite3.connect(config.DB_PATH) as conn:
         c = conn.cursor()
@@ -131,7 +133,12 @@ async def board(interaction: discord.Interaction):
         conn.commit()
 
     await handlers.update_or_post_daily_board(interaction.channel, board_date)
-    await interaction.response.send_message("Board reposted at the bottom of the channel.", ephemeral=True)
+    try:
+        await interaction.followup.send("Board reposted at the bottom of the channel.", ephemeral=True)
+    except discord.NotFound:
+        # The interaction webhook expired, but the board was already updated.
+        # Do not leave a traceback for a confirmation that arrived too late to matter.
+        print("Board reposted; interaction webhook unavailable for the confirmation.")
 
 
 async def missing(interaction: discord.Interaction):
