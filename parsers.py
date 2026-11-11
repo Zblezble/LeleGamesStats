@@ -41,23 +41,26 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
-    # 3. REDACTLE (Redactle #1670 — stats may be on the same line or the next one)
+    # 3. REDACTLE (Redactle #1670 — stats may be on the same line or the next one;
+    # hint cost is 10 guesses per 👆 and 100 guesses per 💬)
     for m in re.finditer(
-        r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guesses[.!]([^\n]*)(?:\n([^\n]+))?",
+        r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guess(?:es)?[.!]([^\n]*)(?:\n([^\n]+))?",
         text
     ):
         status, pid, guesses = m.group(1), m.group(2), int(m.group(3))
         stats_line = m.group(4) or m.group(5) or ""
         solved = 1 if status == "cracked" else 0
-        # Parse hints: "Hints👆1, 💬0", "Hints: 2" or "Hints: none"
+        arrow_hints, chat_hints = 0, 0
         h_match = re.search(r"Hints👆(\d+),\s*💬(\d+)", stats_line)
-        h2_match = re.search(r"Hints:\s*(\d+)", stats_line)
         if h_match:
-            hints = int(h_match.group(1)) + int(h_match.group(2))
-        elif h2_match:
-            hints = int(h2_match.group(1))
+            arrow_hints, chat_hints = int(h_match.group(1)), int(h_match.group(2))
         else:
-            hints = 0
+            # The generic "Hints: N" format counts all hints at the 👆 price.
+            h2_match = re.search(r"Hints:\s*(\d+)", stats_line)
+            if h2_match:
+                arrow_hints = int(h2_match.group(1))
+        hints = arrow_hints + chat_hints
+        hint_penalty = arrow_hints * 10 + chat_hints * 100
         # Parse time: "⏱️ 6m16s" (emoji with or without variation selector)
         t_match = re.search(r"⏱️?\s*(?:(\d+)h)?(?:(\d+)m)?(\d+)s", stats_line)
         secs = 0
@@ -71,7 +74,7 @@ def parse_all_games(text: str) -> list[dict]:
 
         # Solved beats unsolved; then fewer guesses, fewer hints, faster time
         base = guesses if solved else (10000 + guesses)
-        rank_score = base + (hints * 0.01) + (secs * 0.000001)
+        rank_score = base + hint_penalty + (secs * 0.000001)
 
         results.append({
             "game": "Redactle",

@@ -179,6 +179,10 @@ CASES = [
      "#Tradle #1710 X/6\n⬜🟨🟩🟨🟪🟪\nhttps://tradle.net/",
      [("Tradle", "#1710", 0, "X/6")]),
 
+    ("redactle singular guess with priced hints",
+     "I cracked Redactle #1680 in 1 guess!\n🎲 1 | 🔥 2 | Avg 68.39 | Hints👆3, 💬1 | ⏱️ 2m18s\n\nhttps://redactle.net/",
+     [("Redactle", "#1680", 1, "1g, 4h (2m18s)")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),
