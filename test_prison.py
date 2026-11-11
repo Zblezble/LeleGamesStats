@@ -114,10 +114,11 @@ def test_prison_disabled_is_noop():
 
 
 def test_prison_first_try_rules():
-    "Bonus-heavy first guesses count, but a vanilla FIRST TRY at rank exactly 1 counts too."
-    for rank in (0.95, 1.0):
-        assert games.is_first_try({"game": "Flagle", "solved": 1, "rank_score": rank})
-    assert not games.is_first_try({"game": "Wordle", "solved": 1, "rank_score": 1.0})
+    "First-try eligible games trigger; out-of-scope games cannot trigger."
+    for game in ("Globle", "Regionle", "Metazooa", "Redactle"):
+        assert games.is_first_try({"game": game, "solved": 1, "rank_score": 1.0}), game
+    for game in ("Wordle", "Flagle", "Trivmount"):
+        assert not games.is_first_try({"game": game, "solved": 1, "rank_score": 1.0}), game
 
 
 if __name__ == "__main__":

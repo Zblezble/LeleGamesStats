@@ -43,7 +43,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
    | `SCORE_CHANNEL_ID`  | no       | Channel to watch. If unset, watches all.     |
    | `BOT_TZ`            | no       | Timezone for the daily cutoff, e.g. `Europe/Warsaw`. Defaults to server-local time. |
    | `DISABLED_GAMES`    | no       | Comma-separated games to turn off, e.g. `Wordle`. Hidden from the board, `/games` and `/missing`; on by default. |
-   | `PRISON_ENABLED`    | no       | `1` to enable first-attempt prison on Globle, Regionle, Metazooa, Redactle, and Flagle. Jailed players stay on the leaderboard but earn no points that day. Opt-in, disabled by default. |
+   | `PRISON_ENABLED`    | no       | `1` to enable first-attempt prison on Globle, Regionle, Metazooa, and Redactle. Jailed players stay on the leaderboard but earn no points that day. Opt-in, disabled by default. |
 
 4. Run:
 

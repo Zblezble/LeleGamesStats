@@ -66,7 +66,7 @@ DIFFICULTY_GAMES = {
 
 # First-guess games where hitting on attempt #1 triggers the optional prison mechanic.
 # Only native parsed scores from genuine posts are considered; /forfeit cannot enter.
-PRISON_GAMES = {"Globle", "Regionle", "Metazooa", "Redactle", "Flagle"}
+PRISON_GAMES = {"Globle", "Regionle", "Metazooa", "Redactle"}
 
 
 def is_first_try(result: dict) -> bool:
