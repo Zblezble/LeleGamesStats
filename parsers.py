@@ -426,6 +426,31 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # 20. CHESSLE (Chessle №216 · Medium · ✓ 1/6 · 1m 14s)
+    # Attempts win first; time is only a small tiebreak. Level stays in the game label.
+    for m in re.finditer(
+        r"Chessle\s+(?:№|#)\s*(\d+)\s*[·•]\s*([^·•\n]+?)\s*[·•]\s*"
+        r"(?:[✓✗xX]\s*)?([1-6Xx])\s*/\s*(\d+)(?:\s*[·•]\s*([0-9hms ]+))?",
+        text, re.IGNORECASE
+    ):
+        pid, level, score_ch, time_str = m.group(1), m.group(2).strip(), m.group(3).upper(), (m.group(5) or "").strip()
+        solved = 0 if score_ch == "X" else 1
+        tries = int(score_ch) if solved else 99
+        secs = 0
+        if time_str:
+            totals = {unit: 0 for unit in "hms"}
+            for value, unit in re.findall(r"(\d+)\s*([hms])", time_str):
+                totals[unit] += int(value)
+            secs = totals["h"] * 3600 + totals["m"] * 60 + totals["s"]
+        results.append({
+            "game": f"Chessle ({level})" if level else "Chessle",
+            "puzzle_id": f"#{pid}",
+            "solved": solved,
+            "rank_score": float(tries) + (secs * 0.000001),
+            "display_score": f"{score_ch}/6" + (f" · {time_str}" if time_str else ""),
+            "extra_url": None
+        })
+
     if config.DISABLED_GAMES:
         results = [r for r in results
                    if not any(r["game"].lower().startswith(d) for d in config.DISABLED_GAMES)]

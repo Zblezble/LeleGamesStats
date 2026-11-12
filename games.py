@@ -24,6 +24,7 @@ GAME_META = {
     "Mathle": {"icon": "➗", "desc": "find the hidden equation in 6 tries", "url": "https://wordle.global/en/mathle"},
     "History in Order": {"icon": "🕰️", "desc": "put seven events in order with 3 chances", "url": "https://wordle.global/en/history-order"},
     "Tradle": {"icon": "🚢", "desc": "guess which country exports the goods", "url": "https://tradle.net/"},
+    "Chessle": {"icon": "♞", "desc": "solve a chess position in six attempts", "url": "https://wordle.global/en/chessle"},
 }
 
 
@@ -60,7 +61,7 @@ GRADED_GAMES = {"Trivmount"}
 # excluded because their native scores are not comparable to a 6-try puzzle:
 # 40 guesses is a perfectly normal Redactle, not the hardest game ever.
 DIFFICULTY_GAMES = {
-    "Wordle", "Worldle", "Flagle", "Regionle", "Mathle", "Trivmount", "Tradle", "History in Order",
+    "Wordle", "Worldle", "Flagle", "Regionle", "Mathle", "Trivmount", "Tradle", "Chessle", "History in Order",
     "Thursday Thirty", "Songless", "Songspot", "Centumth", "Majority", "Magnitudle",
 }
 
