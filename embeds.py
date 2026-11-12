@@ -72,6 +72,52 @@ def compute_daily_points(board_date: str):
     return mvp_points, names
 
 
+def _append_daily_fields(embed: discord.Embed, candidates: list[tuple[str, str, bool]]):
+    """Fit the board within Discord's field count and total character limits.
+
+    Keep the normal fields that fit, put overflow into one compact notice rather than
+    silently letting Discord reject every future board update. Token-heavy callers are
+    budgeted too, including the final points legend.
+    """
+    remaining = 6000 - len(embed.title or "") - len(embed.description or "")
+    overflow = []
+    for name, value, inline in candidates:
+        field_size = len(name) + len(value)
+        # Keep one field slot for the overflow notice.
+        if len(embed.fields) >= 24 or field_size > remaining:
+            overflow.append((name, value, inline))
+            continue
+        embed.add_field(name=name, value=value, inline=inline)
+        remaining -= field_size
+
+    if not overflow:
+        return
+
+    # Never throw an embed-size error when the board exceeds capacity. Truncation is
+    # explicit to users, and scores remain intact in the database, not dropped there.
+    if remaining < 80 and len(embed.fields) < 25:
+        embed.add_field(
+            name="Shown within Discord limits",
+            value=f"{len(overflow)} more result groups didn't fit on today's board.",
+            inline=False,
+        )
+        return
+
+    text_blocks = []
+    for name, value, _inline in overflow:
+        text_blocks.append(f"{name}\n{value}")
+    text = "\n\n".join(text_blocks)
+    notice = f"\n\n(+ {len(overflow)} more result groups didn't fit on today's board.)"
+    limit = max(0, min(1024, remaining) - len(notice) - 1)
+    if text and limit > 20 and len(embed.fields) < 25:
+        clipped = text[:limit]
+        if len(clipped) < len(text):
+            clipped = clipped.rsplit("\n", 1)[0] + "…"
+        embed.add_field(name="More results", value=clipped + notice, inline=False)
+    elif len(embed.fields) < 25:
+        embed.add_field(name="Shown within Discord limits", value=f"{len(overflow)} more result groups.", inline=False)
+
+
 def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     """Constructs the single consolidated Daily Leaderboard Embed for a given date."""
     with sqlite3.connect(config.DB_PATH) as conn:
@@ -101,9 +147,7 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
         key = (game, pid)
         grouped.setdefault(key, []).append((uid, uname, solved, rscore, dscore, url))
 
-    # Daily MVP points (1st = 3pts, 2nd = 2pts, 3rd = 1pt in games with >=2 players)
-    mvp_points, names = compute_daily_points(board_date)
-
+    candidates = []
     for (game, pid), entries in grouped.items():
         icon = get_game_icon(game)
         lines = []
@@ -113,19 +157,21 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
             lines.append(f"{uname} `{dscore}`{duel_str}")
 
         field_title = f"{icon} {game} {pid}"
-        # Clamp to Discord's 1024-char field limit so a huge game can't kill the whole board
+        # Per-value cap, then total budget (plus footer), so one busy day can't kill the board.
         clamp = lambda v: v if len(v) <= 1024 else v[:1021] + "…"
-        if layout == "rows":
-            embed.add_field(name=field_title, value=clamp(" · ".join(lines)), inline=False)
-        else:
-            embed.add_field(name=field_title, value=clamp("\n".join(lines)), inline=True)
+        value = " · ".join(lines) if layout == "rows" else "\n".join(lines)
+        candidates.append((field_title, clamp(value), layout != "rows"))
+
+    # Daily MVP points are budgeted as one field like any other, not appended ad hoc.
+    mvp_points, names = compute_daily_points(board_date)
 
     # Add Daily Standings Footer/Summary if competitive games exist
     if mvp_points:
         standings = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
         standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
-        embed.add_field(name="Today's points (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt)", value=standings_str, inline=False)
+        candidates.append(("Today's points (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt)", standings_str, False))
 
+    _append_daily_fields(embed, candidates)
     return embed
 
 
@@ -239,8 +285,8 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
             f"{name} finished mid-pack with `{pts}` pts. Close enough to the summit to hear the laughter.",
         ),
         "last": (
-            "Not everyone can be first. {name} found a different way to contribute.",
-            "A brave bottom-place finish by {name}. Every group needs a hero who finished.",
+            f"Not everyone can be first. {name} found a different way to contribute.",
+            f"A brave bottom-place finish by {name}. Every group needs a hero who finished.",
             f"{name} brings up the rear and keeps the group together. Teamwork matters.",
             f"{name} finishes with `{pts}` pts. Already plotting the triumphant comeback.",
             f"{name} accepted the wooden spoon with grace and an inconvenient rematch request.",
