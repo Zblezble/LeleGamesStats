@@ -70,7 +70,17 @@ async def _pin_new_daily_board(channel: discord.TextChannel, board_date: str, me
             print(f"Warning: could not unpin older board {old_date}: {e}")
 
 
+_BOARD_LOCKS: dict[str, asyncio.Lock] = {}
+
+
 async def update_or_post_daily_board(channel: discord.TextChannel, board_date: str):
+    """Serialize check-then-create for a date, so simultaneous ingests can't duplicate it."""
+    lock = _BOARD_LOCKS.setdefault(board_date, asyncio.Lock())
+    async with lock:
+        await _update_or_post_daily_board_impl(channel, board_date)
+
+
+async def _update_or_post_daily_board_impl(channel: discord.TextChannel, board_date: str):
     """Edits today's existing summary Embed, or posts a new one if none exists yet."""
     with sqlite3.connect(config.DB_PATH) as conn:
         c = conn.cursor()
@@ -82,10 +92,14 @@ async def update_or_post_daily_board(channel: discord.TextChannel, board_date: s
 
     with sqlite3.connect(config.DB_PATH) as conn:
         c = conn.cursor()
-        c.execute("SELECT message_id FROM daily_boards WHERE board_date = ?", (board_date,))
+        c.execute("SELECT channel_id, message_id FROM daily_boards WHERE board_date = ?", (board_date,))
         row = c.fetchone()
+        if config.DEBUG_LOG:
+            print(f"Board update: channel={channel.id}, row={row}")
 
-        if row:
+        # Operate on the record for this channel only; a bot must not edit another
+        # channel's pinned digest and flip its DB record to a wrong-body board.
+        if row and row[0] == channel.id:
             msg_id = row[0]
             try:
                 msg = await channel.fetch_message(msg_id)
@@ -97,19 +111,28 @@ async def update_or_post_daily_board(channel: discord.TextChannel, board_date: s
                 print(f"Warning: failed to edit board message: {e}")
                 return
 
-        # First board of a new day: publish yesterday's locked wrap once, above the fresh board.
+        # First board of a new day: backfill up to 7 previous days, starting at yesterday.
+        # A quiet weekend or bot downtime should not erase the last competitive day's wrap.
+        yesterday = None
         try:
             yesterday = (datetime.strptime(board_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
         except ValueError:
-            yesterday = None
-        if yesterday and not db.wrap_already_posted(yesterday) and db.day_has_scores(yesterday):
-            wrap = embeds.build_wrap_embed(yesterday)
-            if wrap is not None:
-                try:
-                    wrap_msg = await channel.send(embed=wrap)
-                    db.mark_wrap_posted(yesterday, wrap_msg.id)
-                except discord.HTTPException as e:
-                    print(f"Warning: failed to post day wrap: {e}")
+            pass
+        if yesterday:
+            for days_back in range(1, 8):
+                day = (datetime.strptime(yesterday, "%Y-%m-%d") - timedelta(days=days_back)).strftime("%Y-%m-%d")
+                if config.DEBUG_LOG:
+                    print(f"Backfill {day}: scores={db.day_has_scores(day)}, already_wrapped={db.wrap_already_posted(day)}")
+                if not db.day_has_scores(day) or db.wrap_already_posted(day):
+                    continue
+                wrap = embeds.build_wrap_embed(day)
+                if wrap is not None:
+                    try:
+                        wrap_msg = await channel.send(embed=wrap)
+                        db.mark_wrap_posted(day, wrap_msg.id)
+                    except discord.HTTPException as e:
+                        print(f"Warning: failed to post day wrap: {e}")
+                break
 
         try:
             new_msg = await channel.send(embed=embed)
@@ -125,6 +148,19 @@ async def update_or_post_daily_board(channel: discord.TextChannel, board_date: s
 
 
 def register(bot):
+    # Slash commands are guild-only by design, and if a designated scores
+    # channel is configured do not let other channels or DMs move its board.
+    async def restrict_scores_channel(interaction):
+        if interaction.guild is None or (config.SCORE_CHANNEL_ID and interaction.channel.id != config.SCORE_CHANNEL_ID):
+            try:
+                await interaction.response.send_message("Use this command in the results channel.", ephemeral=True)
+            except discord.NotFound:
+                pass
+            return False
+        return True
+
+    bot.tree.interaction_check = restrict_scores_channel
+
     """Attach event listeners. The bot instance is captured so on_message can
     fall through to prefix-command processing without a circular import."""
 

@@ -188,6 +188,9 @@ async def remove_entry(interaction: discord.Interaction,
         f"removed {result['count']}: {', '.join(result['users'])}", "admin_remove"
     )
 
+    # Acknowledge before maintenance (moderation remains public for transparency).
+    await interaction.response.defer(ephemeral=False)
+
     # Re-render the day's board only if one already exists (don't create boards for old dates)
     with sqlite3.connect(config.DB_PATH) as conn:
         has_board = conn.execute("SELECT 1 FROM daily_boards WHERE board_date = ?", (board_date,)).fetchone()
@@ -216,8 +219,9 @@ async def forfeit(interaction: discord.Interaction, game: str):
                                               interaction.user.display_name, key)
     db.log_ingest(board_date, interaction.user.id, interaction.user.display_name,
                   f"/forfeit {game}", f"DNF {key} {puzzle_id}", "forfeit")
+    await interaction.response.defer(ephemeral=True)
     await handlers.update_or_post_daily_board(interaction.channel, board_date)
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"Forfeited **{key}** today · logged as DNF ({puzzle_id})."
         + (" Your earlier entry was replaced." if overwritten else ""),
         ephemeral=True
@@ -233,8 +237,9 @@ async def undo(interaction: discord.Interaction):
         )
         return
     summary, deleted = result
+    await interaction.response.defer(ephemeral=True)
     await handlers.update_or_post_daily_board(interaction.channel, today_str())
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"Undid your latest ingest · removed {deleted} entr{'y' if deleted == 1 else 'ies'}: {summary}",
         ephemeral=True
     )
@@ -268,13 +273,14 @@ async def layout_switch(interaction: discord.Interaction):
         )
         conn.commit()
 
+    await interaction.response.defer(ephemeral=True)
     board_date = today_str()
     await handlers.update_or_post_daily_board(interaction.channel, board_date)
 
     if new_layout == "rows":
-        await interaction.response.send_message("Board layout: wide · one line per game.", ephemeral=True)
+        await interaction.followup.send("Board layout: wide · one line per game.", ephemeral=True)
     else:
-        await interaction.response.send_message("Board layout: compact · three games per row.", ephemeral=True)
+        await interaction.followup.send("Board layout: compact · three games per row.", ephemeral=True)
 
 
 def register(bot):
