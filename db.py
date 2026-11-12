@@ -1,5 +1,8 @@
 """SQLite schema and the ingest audit log."""
+import csv
+import io
 import sqlite3
+from datetime import datetime, timedelta
 
 import config
 
@@ -184,6 +187,50 @@ def forfeit_entry(board_date: str, user_id: int, user_name: str, game_key: str):
         """, (board_date, user_id, user_name, game, puzzle_id, 0, rank, "DNF"))
         conn.commit()
         return puzzle_id, bool(overwritten)
+
+
+def export_scores_csv(days: int = 7) -> tuple[str, str, str]:
+    """Export the last ``days`` days of current scores as CSV text.
+
+    Returns ``(csv_text, start_date, end_date)`` where both dates are inclusive
+    ISO ``YYYY-MM-DD`` strings. ``end_date`` is UTC today from
+    ``config.today_str()``; ``days`` defaults to 7 and is clamped to 1..31.
+    Cells beginning with a spreadsheet formula trigger (``=``, ``+``, ``-``,
+    ``@``, tab, or CR) are prefixed with a single quote to keep exports inert.
+    """
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = 7
+    days = max(1, min(days, 31))
+
+    end_date = config.today_str()
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    start_date = (end_dt - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+
+    columns = [
+        "board_date", "game", "puzzle_id", "user_id", "user_name", "solved",
+        "rank_score", "display_score", "extra_url", "timestamp", "ingest_id",
+    ]
+
+    def formula_safe(value):
+        text = "" if value is None else str(value)
+        return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+    with sqlite3.connect(config.DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT board_date, game, puzzle_id, user_id, user_name, solved,"
+            " rank_score, display_score, extra_url, timestamp, ingest_id"
+            " FROM scores WHERE board_date BETWEEN ? AND ?"
+            " ORDER BY board_date ASC, game ASC, user_id ASC, puzzle_id ASC",
+            (start_date, end_date),
+        ).fetchall()
+
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(columns)
+    writer.writerows([formula_safe(value) for value in row] for row in rows)
+    return out.getvalue(), start_date, end_date
 
 
 def undo_latest_ingest(board_date: str, user_id: int):

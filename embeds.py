@@ -2,7 +2,7 @@
 import random
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import discord
 
@@ -350,6 +350,80 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
         solo_players = sorted({uname for entries in grouped.values()
                                for _uid, uname, _s, _r, _d, _u in entries})
         embed.add_field(name="\u200b", value="No points on the board. " + ", ".join(solo_players) + " played.", inline=False)
+    return embed
+
+
+def build_weekly_embed(days: int = 7) -> discord.Embed | None:
+    """Weekly recap, ranking only results from the inclusive window.
+    Returns None if the period has no results; doesn't write to the DB.
+    """
+    end_text = config.today_str()
+    end_dt = datetime.strptime(end_text, "%Y-%m-%d")
+    start_date = (end_dt - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+
+    grouped = {}
+    with sqlite3.connect(config.DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT board_date, game, puzzle_id, user_id, user_name, solved, rank_score, display_score, extra_url "
+            "FROM scores WHERE board_date BETWEEN ? AND ?",
+            (start_date, end_text)
+        ).fetchall()
+    if not rows:
+        return None
+
+    for _date, game, pid, uid, uname, solved, rscore, dscore, url in rows:
+        grouped.setdefault((game, pid), []).append((uid, uname, solved, rscore, dscore, url))
+
+    totals, names = {}, {}
+    for (game, _pid), entries in grouped.items():
+        graded = game in GRADED_GAMES
+        unique_scores = sorted({e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)})
+        for uid, uname, solved, rscore, _d, _u in entries:
+            competes = solved or (graded and rscore < 10000)
+            if competes:
+                names[uid] = uname
+                rank_idx = unique_scores.index(rscore)
+                if len(entries) >= 2 and rank_idx < 3:
+                    totals[uid] = totals.get(uid, 0.0) + (3 - rank_idx)
+
+    counters = {uid for entries in grouped.values() for uid, *_ in entries}
+    game_names = {g for g, _ in grouped}
+    days_count = len({row[0] for row in rows})
+    embed = discord.Embed(
+        title=f"🏆 Weekly recap · {config.date_label(end_text)}",
+        description=f"{start_date} to {end_text} (inclusive)",
+        color=0xF59E0B,
+    )
+    embed.add_field(
+        name="Turnout",
+        value=f"{len(counters)} players · {len(game_names)} games · {days_count} active days",
+        inline=False
+    )
+
+    # Same normalized, comparable-score handling as the daily wrap.
+    rates = []
+    for (game, _pid), entries in grouped.items():
+        if len(entries) < 2 or game not in DIFFICULTY_GAMES:
+            continue
+        results = sorted(_performance_fraction(game, solved, rscore, dscore)
+                         for _uid, _uname, solved, rscore, dscore, _url in entries)
+        rates.append((game, _median(results)))
+    meaningful = [entry for entry in rates if entry[1] > 0]
+    if meaningful:
+        high = max(r[1] for r in meaningful)
+        low = min(r[1] for r in meaningful)
+        if high != low:
+            embed.add_field(
+                name="Game difficulty",
+                value=_difficulty_comment(end_text, "easiest", [r[0] for r in meaningful if r[1] == high])
+                      + "\n"
+                      + _difficulty_comment(end_text, "hardest", [r[0] for r in meaningful if r[1] == low]),
+                inline=False,
+            )
+
+    ordered = sorted(totals.items(), key=lambda kv: (-kv[1], names[kv[0]]))
+    standings = " · ".join(f"{names[u]} `{p}`" for u, p in ordered) if ordered else "No podium points yet. See you tomorrow."
+    embed.add_field(name="Weekly points", value=standings, inline=False)
     return embed
 
 

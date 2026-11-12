@@ -1,4 +1,5 @@
 """Slash commands. register(bot) attaches them to the command tree."""
+import io
 import re
 import sqlite3
 
@@ -9,6 +10,10 @@ import config
 import db
 import embeds
 import handlers
+from datetime import datetime
+
+import csv
+
 from config import today_str
 from games import ACTIVE_GAME_META, get_game_icon
 
@@ -66,6 +71,30 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
     await interaction.response.send_message(embed=embed)
 
 
+def _personal_best_scores(all_rows, user_id: int) -> dict[str, dict]:
+    """Return the native display score with the user's lowest rank_score, per game."""
+    best = {}
+    for _bdate, game, _pid, uid, solved, rank_score, display_score in all_rows:
+        if uid == user_id and solved:
+            if game not in best or rank_score < best[game].get("rank_score", 0):
+                best[game] = {"rank_score": rank_score, "display_score": display_score}
+    return best
+
+
+def _play_streaks(date_strings, today=None):
+    """Return (current ongoing run, longest run), distinct dates per day."""
+    dates = sorted({datetime.strptime(x, "%Y-%m-%d") for x in date_strings})
+    best_run = run = 1 if dates else 0
+    for prev, curr in zip(dates, dates[1:]):
+        run = run + 1 if (curr - prev).days == 1 else 1
+        best_run = max(best_run, run)
+    latest_run = 1 if dates else 0
+    for prev, curr in zip(dates, dates[1:]):
+        latest_run = latest_run + 1 if (curr - prev).days == 1 else 1
+    current = latest_run if dates and dates[-1].strftime("%Y-%m-%d") == (today or today_str()) else 0
+    return current, best_run
+
+
 @app_commands.describe(player="Defaults to you if omitted")
 async def stats(interaction: discord.Interaction, player: discord.Member = None):
     target = player or interaction.user
@@ -100,16 +129,27 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
     total_played = sum(v[0] for v in game_totals.values())
     total_crowns = sum(v[2] for v in game_totals.values())
 
+    personal_bests = _personal_best_scores(all_rows, target.id)
+    current_streak, best_streak = _play_streaks(
+        [bdate for bdate, _game, _pid, uid, _s, _r, _d in all_rows if uid == target.id]
+    )
+
     embed = discord.Embed(
         title=f"All-time stats: {target.display_name}",
         description=f"{total_played} games logged · {total_crowns} 🥇 golds",
         color=0x64748B
     )
+    streak_line = f"Longest streak: {best_streak} days"
+    if current_streak:
+        streak_line += f" · current: {current_streak} days"
+    embed.add_field(name="Streak", value=streak_line, inline=False)
+
     lines = []
     for game, (played, solved, crowns) in sorted(game_totals.items()):
         icon = get_game_icon(game)
         win_rate = int((solved / played) * 100) if played else 0
-        lines.append(f"{icon} **{game}** · {played} played · {win_rate}% solved · {crowns} 🥇")
+        pb = personal_bests.get(game, {}).get("display_score", "—")
+        lines.append(f"{icon} **{game}** · {played} played · {win_rate}% solved · {crowns} 🥇 · PB `{pb}`")
 
     embed.add_field(name="By game", value="\n".join(lines), inline=False)
     await interaction.response.send_message(embed=embed)
@@ -259,6 +299,33 @@ async def games(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+async def weekly(interaction: discord.Interaction):
+    embed = embeds.build_weekly_embed()
+    if embed is None:
+        await interaction.response.send_message("No scores logged in the last seven days.", ephemeral=True)
+    else:
+        await interaction.response.send_message(embed=embed)
+
+
+@app_commands.checks.has_permissions(manage_messages=True)
+async def export(interaction: discord.Interaction, days: int | None = None):
+    """Export the last N days as a formula-safe CSV, privately to this admin."""
+    days = max(1, min(days if days is not None else 7, 31))
+    text, start, end = db.export_scores_csv(days)
+    rows = list(csv.reader(io.StringIO(text)))
+    await interaction.response.defer(ephemeral=True)
+    if(len(rows) <= 1):
+        await interaction.followup.send(
+            f"No scores available between {start} and {end}.", ephemeral=True)
+        return
+    filename = f"scores_{start}_to_{end}.csv"
+    await interaction.followup.send(
+        f"Export of {len(rows) - 1} results · {start} to {end}",
+        file=discord.File(io.BytesIO(text.encode("utf-8-sig")), filename=filename),
+        ephemeral=True,
+    )
+
+
 async def layout_switch(interaction: discord.Interaction):
     channel_id = interaction.channel.id
     with sqlite3.connect(config.DB_PATH) as conn:
@@ -293,3 +360,5 @@ def register(bot):
     bot.tree.command(name="remove", description="Remove a score entry (requires Manage Messages)")(remove_entry)
     bot.tree.command(name="games", description="List supported games with descriptions and links")(games)
     bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")(layout_switch)
+    bot.tree.command(name="week", description="Weekly recap: standings, activity and game difficulty")(weekly)
+    bot.tree.command(name="export", description="Export last N days as CSV (admins only, max 31)")(export)
