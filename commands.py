@@ -67,7 +67,7 @@ async def h2h(interaction: discord.Interaction, opponent: discord.Member, player
         icon = get_game_icon(game)
         lines.append(f"{icon} **{game}** · {w1}–{w2} · {t} tied")
 
-    embed.add_field(name="By game", value="\n".join(lines), inline=False)
+    embeds._append_daily_fields(embed, [("By game", "\n".join(lines), False)])
     await interaction.response.send_message(embed=embed)
 
 
@@ -151,7 +151,7 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
         pb = personal_bests.get(game, {}).get("display_score", "—")
         lines.append(f"{icon} **{game}** · {played} played · {win_rate}% solved · {crowns} 🥇 · PB `{pb}`")
 
-    embed.add_field(name="By game", value="\n".join(lines), inline=False)
+    embeds._append_daily_fields(embed, [("By game", "\n".join(lines), False)])
     await interaction.response.send_message(embed=embed)
 
 
