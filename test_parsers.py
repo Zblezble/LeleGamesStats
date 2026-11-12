@@ -9,6 +9,7 @@ a new game lands — the sim boards render from the same parser.
 import os
 import sys
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -190,6 +191,11 @@ CASES = [
     ("chessle unsolved",
      "Chessle №216 · Medium · X/6 · 1m 54s\nhttps://wordle.global/en/chessle",
      [("Chessle (Medium)", "#216", 0, "X/6 · 1m 54s")]),
+
+    ("roughly multiple results with independent paths",
+     "roughly · Where from? #306\nWhich country?\nMe: better than 97% of players\nroughly · Where from? #307\nWhich country?\nMe: better than 24% of players\n■■\nhttps://roughly.is/d/second123",
+     [("Roughly (Where from)", "#306", 1, "Top 3% (97%)"),
+      ("Roughly (Where from)", "#307", 1, "~92% (2 rounds)")]),
 
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),

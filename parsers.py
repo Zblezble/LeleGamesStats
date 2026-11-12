@@ -191,16 +191,22 @@ def parse_all_games(text: str) -> list[dict]:
     # a numeric score in this share text, so estimate it from tier midpoints.
     ROUGHLY_TIER_SCORES = {"□": 0.15, "▧": 0.45, "▣": 0.725, "■": 0.925}
     for m in re.finditer(
-        r"roughly\s*·\s*([^\n#]+)#(\d+)\s*\n([^\n]+)\nMe:\s*better than (\d+)% of players(?:.*?(https://roughly\.is/d/[a-zA-Z0-9]+))?",
-        text, re.DOTALL
+        r"roughly\s*·\s*([^\n#]+)#(\d+)\s*\n([^\n]+)\nMe:\s*better than (\d+)% of players",
+        text, re.IGNORECASE
     ):
         submode = m.group(1).strip().rstrip("?")
         pid = m.group(2)
         pct = int(m.group(4))
-        duel_url = m.group(5)
         score = float(pct)
         display = f"Top {100 - pct}% ({pct}%)"
-        if grid_match := re.search(r"(?:^|\n)\s*([□▧▣■]{2,})\s*(?:\n|$)", text):
+
+        # Restrict grid and duel-link parsing to this share only, never the next result.
+        tail = text[m.end():]
+        next_header = re.search(r"\nroughly\s*·", tail, re.IGNORECASE)
+        segment = tail[:next_header.start() if next_header else len(tail)]
+        link = re.search(r"https://roughly\.is/d/[a-zA-Z0-9]+", segment)
+        duel_url = link.group(0) if link else None
+        if grid_match := re.search(r"(?:^|\n)\s*([□▧▣■]{2,})\s*(?:\n|$)", segment):
             tiers = [ROUGHLY_TIER_SCORES[s] for s in grid_match.group(1)]
             score = sum(tiers) / len(tiers)
             display = f"~{score:.0%} ({len(tiers)} rounds)"

@@ -117,8 +117,11 @@ def test_prison_first_try_rules():
     "First-try eligible games trigger; out-of-scope games cannot trigger."
     for game in ("Globle", "Regionle", "Metazooa", "Redactle"):
         assert games.is_first_try({"game": game, "solved": 1, "rank_score": 1.0}), game
-    for game in ("Wordle", "Flagle", "Trivmount"):
+    for game in ("Wordle", "Trivmount"):
         assert not games.is_first_try({"game": game, "solved": 1, "rank_score": 1.0}), game
+    # Redactle's extra timer digits do not change solvability of a first attempt.
+    assert not games.is_first_try({"game": "Flagle", "solved": 1, "rank_score": 1.0})  # removed from prison
+    assert games.is_first_try({"game": "Redactle", "solved": 1, "rank_score": 1.000138})
 
 
 if __name__ == "__main__":

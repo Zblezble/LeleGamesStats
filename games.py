@@ -78,7 +78,10 @@ def is_first_try(result: dict) -> bool:
     if not isinstance(rank, (int, float)):
         return False
     if result["game"] == "Flagle":
-        return rank <= 1.0  # First try = 1.0; bonus tiles may subtract more
+        return rank <= 1.0
+    if result["game"] == "Redactle":
+        # Timer seconds are a fractional tiebreak, not extra guesses: 1g12s is FIRST TRY.
+        return rank < 2.0
     return abs(rank - 1.0) < 1e-6
 
 MEME_SCORES = {
