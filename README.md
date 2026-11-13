@@ -18,6 +18,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
   - `/week` – seven-day recap: group leaderboard, turnout, and game difficulty.
   - `/export [days]` – admin-only CSV export for the last N days (default 7, max 31), privately attached with formula-safe cells.
   - `/board` – re-posts today's board at the bottom of the channel.
+  - `/wrap` – posts yesterday's wrap on demand (once per date; skips empty days).
   - `/layout_switch` – toggles the channel's board between compact (three games per row) and wide (one line per game).
   - `/games` – lists supported games with short descriptions and links (private reply).
   - `/missing` – private (ephemeral) checklist: your games still to play today, with links.

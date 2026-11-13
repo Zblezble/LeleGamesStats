@@ -73,6 +73,39 @@ async def _pin_new_daily_board(channel: discord.TextChannel, board_date: str, me
 _BOARD_LOCKS: dict[str, asyncio.Lock] = {}
 
 
+async def post_or_backfill_wrap(channel: discord.TextChannel, target_date: str | None = None) -> tuple[str, str | None]:
+    """Post the oldest unwrapped day in the trailing week, or report why not.
+
+    Returns (status, day) with status posted / exists / none.
+    Idempotent: a day has one wrap marked as posted and never gets sent again.
+    """
+    if target_date:
+        try:
+            start = datetime.strptime(target_date, "%Y-%m-%d")
+        except ValueError:
+            return "invalid", target_date
+        day = start
+    else:
+        day = datetime.strptime(config.today_str(), "%Y-%m-%d") - timedelta(days=1)
+
+    for offset in range(7):
+        candidate = (day - timedelta(days=offset)).strftime("%Y-%m-%d")
+        if db.wrap_already_posted(candidate):
+            return "exists", candidate
+        if not db.day_has_scores(candidate):
+            continue
+        embed = embeds.build_wrap_embed(candidate)
+        if embed is not None:
+            try:
+                msg = await channel.send(embed=embed)
+                db.mark_wrap_posted(candidate, msg.id)
+                return "posted", candidate
+            except discord.HTTPException as e:
+                print(f"Warning: failed to post day wrap: {e}")
+                return "error", candidate
+    return "none", None
+
+
 async def update_or_post_daily_board(channel: discord.TextChannel, board_date: str):
     """Serialize check-then-create for a date, so simultaneous ingests can't duplicate it."""
     lock = _BOARD_LOCKS.setdefault(board_date, asyncio.Lock())
@@ -111,28 +144,7 @@ async def _update_or_post_daily_board_impl(channel: discord.TextChannel, board_d
                 print(f"Warning: failed to edit board message: {e}")
                 return
 
-        # First board of a new day: backfill up to 7 previous days, starting at yesterday.
-        # A quiet weekend or bot downtime should not erase the last competitive day's wrap.
-        yesterday = None
-        try:
-            yesterday = (datetime.strptime(board_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-        except ValueError:
-            pass
-        if yesterday:
-            for days_back in range(1, 8):
-                day = (datetime.strptime(yesterday, "%Y-%m-%d") - timedelta(days=days_back)).strftime("%Y-%m-%d")
-                if config.DEBUG_LOG:
-                    print(f"Backfill {day}: scores={db.day_has_scores(day)}, already_wrapped={db.wrap_already_posted(day)}")
-                if not db.day_has_scores(day) or db.wrap_already_posted(day):
-                    continue
-                wrap = embeds.build_wrap_embed(day)
-                if wrap is not None:
-                    try:
-                        wrap_msg = await channel.send(embed=wrap)
-                        db.mark_wrap_posted(day, wrap_msg.id)
-                    except discord.HTTPException as e:
-                        print(f"Warning: failed to post day wrap: {e}")
-                break
+        await post_or_backfill_wrap(channel, board_date)
 
         try:
             new_msg = await channel.send(embed=embed)

@@ -299,6 +299,19 @@ async def games(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+async def wrap(interaction: discord.Interaction):
+    """Post the oldest currently unwrapped recent day, without spamming repeats."""
+    status, day = await handlers.post_or_backfill_wrap(interaction.channel)
+    if status == "posted":
+        await interaction.response.send_message(f"🏆 Wrapped up **{day}**.", ephemeral=True)
+    elif status == "exists":
+        await interaction.response.send_message(f"**{day}** already has a wrap in this channel.", ephemeral=True)
+    elif status == "invalid":
+        await interaction.response.send_message(f"Invalid date format: {day}.", ephemeral=True)
+    else:
+        await interaction.response.send_message("No results available to wrap for yesterday.", ephemeral=True)
+
+
 async def weekly(interaction: discord.Interaction):
     embed = embeds.build_weekly_embed()
     if embed is None:
@@ -360,5 +373,6 @@ def register(bot):
     bot.tree.command(name="remove", description="Remove a score entry (requires Manage Messages)")(remove_entry)
     bot.tree.command(name="games", description="List supported games with descriptions and links")(games)
     bot.tree.command(name="layout_switch", description="Toggle today's board between compact (3 per row) and wide (one line per game)")(layout_switch)
+    bot.tree.command(name="wrap", description="Post yesterday's wrap if it hasn't already been posted")(wrap)
     bot.tree.command(name="week", description="Weekly recap: standings, activity and game difficulty")(weekly)
     bot.tree.command(name="export", description="Export last N days as CSV (admins only, max 31)")(export)
