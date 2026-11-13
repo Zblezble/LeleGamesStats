@@ -2,6 +2,8 @@
 
 A Discord bot that digests daily puzzle-game results posted in a channel into a single, auto-updating leaderboard embed.
 
+**How score calculation works:** see [SCORING.md](SCORING.md).
+
 ## What it does
 
 - Watches a designated channel for raw game result pastes.
