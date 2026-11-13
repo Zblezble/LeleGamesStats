@@ -216,6 +216,19 @@ def _median(values: list[float]) -> float:
     return (values[mid - 1] + values[mid]) / 2
 
 
+def _prison_group(start_date: str, end_date: str):
+    """Optional field listing who went to prison over a day or week, or None."""
+    rows = db.prison_breakdown(start_date, end_date)
+    if not rows:
+        return None
+    label = "Prisoners" if start_date == end_date else "Prisoners (days)"
+    lines = []
+    for _name, _uid, days in rows:
+        noun = "day" if days == 1 else "days"
+        lines.append(f"{_name} · {days} {noun}")
+    return label, "\n".join(lines)
+
+
 def _difficulty_comment(board_date: str, level: str, candidates: list[str]) -> str:
     """A playful difficulty verdict for a day, using no opaque cross-game percentages."""
     name = random.Random(f"{board_date}:{level}:game").choice(candidates)
@@ -315,6 +328,10 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     game_names = {game for game, _pid in grouped}
     embed.add_field(name="Turnout", value=f"{len(players)} players · {len(game_names)} games", inline=False)
 
+    police = _prison_group(board_date, board_date)
+    if police is not None:
+        embed.add_field(name=police[0], value=police[1], inline=False)
+
     # Relative daily difficulty: median normalized result quality per game.
     # Solve flags alone cannot distinguish an easy 5/6 day from a perfect first try.
     rates = []
@@ -402,6 +419,9 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
         value=f"{len(counters)} players · {len(game_names)} games · {days_count} active days",
         inline=False
     )
+    police = _prison_group(start_date, end_text)
+    if police is not None:
+        embed.add_field(name=police[0], value=police[1], inline=False)
 
     # Same normalized, comparable-score handling as the daily wrap.
     rates = []

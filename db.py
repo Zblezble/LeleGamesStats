@@ -94,6 +94,28 @@ def day_has_scores(board_date: str) -> bool:
         return conn.execute("SELECT 1 FROM scores WHERE board_date = ? LIMIT 1", (board_date,)).fetchone() is not None
 
 
+def prison_count(user_id: int) -> int:
+    """Return how many different days the user has been jailed, across all dates."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        return conn.execute("SELECT count(*) FROM prisoners WHERE user_id = ?", (user_id,)).fetchone()[0]
+
+
+def prison_breakdown(start_date: str, end_date: str):
+    """Return (user_name, user_id, prison_days) for a date range, newest name last.
+
+    One row is charged per calendar day; unique-sentencing already enforces at most
+    one jail day per person per date. Sorted by descending days, then name.
+    """
+    with sqlite3.connect(config.DB_PATH) as conn:
+        return conn.execute(
+            "SELECT user_name, user_id, count(*) as prison_days FROM prisoners"
+            " WHERE board_date BETWEEN ? AND ?"
+            " GROUP BY user_id, user_name"
+            " ORDER BY prison_days DESC, user_name ASC",
+            (start_date, end_date)
+        ).fetchall()
+
+
 def add_prisoner(board_date: str, user_id: int, user_name: str, game: str) -> bool:
     """Jail this player for the day. Returns True only for the first jail sentence today."""
     with sqlite3.connect(config.DB_PATH) as conn:

@@ -139,10 +139,11 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
         description=f"{total_played} games logged · {total_crowns} 🥇 golds",
         color=0x64748B
     )
+    embed.add_field(name="Prison days", value=f"Lifetime total: {db.prison_count(target.id)}", inline=False)
     streak_line = f"Longest streak: {best_streak} days"
     if current_streak:
         streak_line += f" · current: {current_streak} days"
-    embed.add_field(name="Streak", value=streak_line, inline=False)
+    embed.add_field(name="Prison days", value=f"Lifetime total: {db.prison_count(target.id)}", inline=False)
 
     lines = []
     for game, (played, solved, crowns) in sorted(game_totals.items()):

@@ -16,7 +16,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 - Awards daily points per game (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt, ties share placement; games with ≥2 players) plus a standings summary on the board.
 - Slash commands:
   - `/h2h <opponent> [player1]` – head-to-head record across all shared puzzles.
-  - `/stats [player]` – all-time games played, solve rate, golds 🥇, personal bests, and play streaks.
+  - `/stats [player]` – all-time games played, solve rate, golds 🥇, personal bests, play streaks, and prison history.
   - `/week` – seven-day recap: group leaderboard, turnout, and game difficulty.
   - `/export [days]` – admin-only CSV export for the last N days (default 7, max 31), privately attached with formula-safe cells.
   - `/board` – re-posts today's board at the bottom of the channel.

@@ -91,3 +91,5 @@ This normalization is intentionally a **heuristic for our own summary**, not a c
 ## Optional prison mode
 
 Set `PRISON_ENABLED=1` to enable it. Currently, eligible games are **Globle, Metazooa, and Regionle** (not Flagle or Travle). A first-attempt win on those games confiscates the player’s daily points, but preserves the actual game result and placement. The sentence is announced once per player per day, and resets with the next day.
+
+For visibility and transparency, `/stats` includes **lifetime prison days**. Daily and weekly wraps also show jailed players for that period when there are offenders.
