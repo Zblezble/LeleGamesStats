@@ -100,7 +100,7 @@ async def _update_or_post_daily_board_impl(channel: discord.TextChannel, board_d
         # Operate on the record for this channel only; a bot must not edit another
         # channel's pinned digest and flip its DB record to a wrong-body board.
         if row and row[0] == channel.id:
-            msg_id = row[0]
+            msg_id = row[1]
             try:
                 msg = await channel.fetch_message(msg_id)
                 await msg.edit(embed=embed)
