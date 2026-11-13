@@ -82,6 +82,9 @@ def _append_daily_fields(embed: discord.Embed, candidates: list[tuple[str, str, 
     remaining = 6000 - len(embed.title or "") - len(embed.description or "")
     overflow = []
     for name, value, inline in candidates:
+        # Per-field value cap too, not just the overall embed-size budget.
+        if len(value) > 1024:
+            value = value[:1021] + "…"
         field_size = len(name) + len(value)
         # Keep one field slot for the overflow notice.
         if len(embed.fields) >= 24 or field_size > remaining:
