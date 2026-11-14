@@ -248,7 +248,7 @@ def register(bot):
         placements = []
         for g in parsed_games:
             p = embeds.placement_of(board_date, g["game"], g["puzzle_id"], user_id)
-            placements.append(f"{games.get_game_icon(g['game'])} **{g['game']}** `{p}`" if p else
+            placements.append(f"{games.get_game_icon(g['game'])} **{g['game']}** `{p} players`" if p else
                               f"{games.get_game_icon(g['game'])} **{g['game']}** DNF")
         lines = [f"{user_name} · logged: " + " · ".join(placements)]
 
