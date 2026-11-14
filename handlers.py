@@ -39,6 +39,14 @@ def _prison_comment(board_date: str, user_name: str, game: str) -> str:
     return random.Random(f"prison:{board_date}:{user_name}").choice(options)
 
 
+def _format_ack_game(result: dict, placement: str | None) -> str:
+    """Report the stored result, not the ranking eligibility behind a missing placement."""
+    text = f"{games.get_game_icon(result['game'])} **{result['game']}** `{result['display_score']}`"
+    if placement:
+        text += f" · `{placement} players`"
+    return text
+
+
 async def _self_destruct(msg: discord.Message, delay: int):
     """Delete a bot acknowledgement after a delay so the channel stays clean."""
     await asyncio.sleep(delay)
@@ -228,10 +236,12 @@ def register(bot):
         # 1. Auto-delete the user's raw score dump to keep the channel clean
         try:
             await message.delete()
-        except discord.Forbidden:
-            print("Warning: Bot lacks 'Manage Messages' permission to delete raw score posts.")
+        except discord.Forbidden as e:
+            print(f"Warning: could not delete raw score message {message.id}: Manage Messages denied (HTTP {e.status}): {e.text}")
         except discord.NotFound:
             pass
+        except discord.HTTPException as e:
+            print(f"Warning: failed to delete raw score message {message.id}: HTTP {e.status}: {e.text or str(e)}")
 
         # Sentence first-attempt win games, but never strip the underlying result.
         jail_game = None
@@ -248,8 +258,7 @@ def register(bot):
         placements = []
         for g in parsed_games:
             p = embeds.placement_of(board_date, g["game"], g["puzzle_id"], user_id)
-            placements.append(f"{games.get_game_icon(g['game'])} **{g['game']}** `{p} players`" if p else
-                              f"{games.get_game_icon(g['game'])} **{g['game']}** DNF")
+            placements.append(_format_ack_game(g, p))
         lines = [f"{user_name} · logged: " + " · ".join(placements)]
 
         if config.PRISON_ENABLED and db.is_jailed(board_date, user_id):

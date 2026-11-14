@@ -16,6 +16,7 @@ os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 import config
 import db
 import embeds
+import handlers
 
 
 def fresh_db():
@@ -118,7 +119,29 @@ def test_weekly_sums_daily_podiums_without_phantom_competition():
         cleanup(old_path, path)
 
 
+def test_ack_preserves_the_actual_result():
+    """Missing placement information must not replace a real result with DNF."""
+    solo = handlers._format_ack_game(
+        {"game": "History in Order", "display_score": "5/6"}, None
+    )
+    assert "5/6" in solo, solo
+    assert "DNF" not in solo, solo
+    assert "players" not in solo, solo
+
+    ranked = handlers._format_ack_game(
+        {"game": "History in Order", "display_score": "6/6"}, "1/2"
+    )
+    assert "6/6" in ranked, ranked
+    assert "1/2 players" in ranked, ranked
+
+    actual_dnf = handlers._format_ack_game(
+        {"game": "History in Order", "display_score": "DNF"}, None
+    )
+    assert "DNF" in actual_dnf, actual_dnf
+
+
 if __name__ == "__main__":
     test_forfeit_requires_an_existing_entry()
     test_weekly_sums_daily_podiums_without_phantom_competition()
+    test_ack_preserves_the_actual_result()
     print("All feature tests passed.")
