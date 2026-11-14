@@ -80,11 +80,8 @@ async def post_or_backfill_wrap(channel: discord.TextChannel, target_date: str |
     Idempotent: a day has one wrap marked as posted and never gets sent again.
     """
     if target_date:
-        try:
-            start = datetime.strptime(target_date, "%Y-%m-%d")
-        except ValueError:
-            return "invalid", target_date
-        day = start
+        start = datetime.strptime(target_date, "%Y-%m-%d")
+        day = start - timedelta(days=1)
     else:
         day = datetime.strptime(config.today_str(), "%Y-%m-%d") - timedelta(days=1)
 
