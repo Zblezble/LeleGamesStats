@@ -9,9 +9,10 @@ import config
 def parse_all_games(text: str) -> list[dict]:
     results = []
 
-    # 1. METAZOOA (Animal #1190)
+    # 1. METAZOOA (Animal #1190); stumped means the player ran out of guesses.
     for m in re.finditer(
-        r"Animal #(\d+).*?\n(?:I figured it out in (\d+) guesses!|I gave up[^\n]*)",
+        r"Animal #(\d+).*?\n(?:I figured it out in (\d+) guesses!"
+        r"|I gave up[^\n]*|I was stumped[^\n]*)",
         text, re.IGNORECASE
     ):
         pid, guesses = m.group(1), m.group(2)
@@ -377,13 +378,17 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
-    # 16. REGIONLE (Regionle #143 4/7, seven colored grid rows)
-    for m in re.finditer(r"Regionle #(\d+)\s+([1-7X])/7", text, re.IGNORECASE):
-        pid, score_ch = m.group(1), m.group(2).upper()
+    # 16. REGIONLE (Regionle #143 4/7, or a named special such as US States).
+    # Any named mode forms its own result group even when the puzzle id is reused.
+    for m in re.finditer(
+        r"Regionle(?:[ \t]+([^#\n]+?))?[ \t]+#(\d+)\s+([1-7X])/7",
+        text, re.IGNORECASE
+    ):
+        mode, pid, score_ch = m.group(1), m.group(2), m.group(3).upper()
         solved = 0 if score_ch == "X" else 1
         tries = int(score_ch) if solved else 99
         results.append({
-            "game": "Regionle",
+            "game": f"Regionle ({mode.strip()})" if mode else "Regionle",
             "puzzle_id": f"#{pid}",
             "solved": solved,
             "rank_score": float(tries),

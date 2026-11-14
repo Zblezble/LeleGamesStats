@@ -71,15 +71,16 @@ PRISON_GAMES = {"Globle", "Regionle", "Metazooa", "Redactle"}
 
 
 def is_first_try(result: dict) -> bool:
-    """Detect a first-attempt win in an eligible game, tolerating Flagle bonuses."""
-    if not result.get("solved") or result.get("game") not in PRISON_GAMES:
+    """Detect a first-attempt win in an eligible base game, including its modes."""
+    base_game = (result.get("game") or "").split(" (", 1)[0]
+    if not result.get("solved") or base_game not in PRISON_GAMES:
         return False
     rank = result.get("rank_score")
     if not isinstance(rank, (int, float)):
         return False
-    if result["game"] == "Flagle":
+    if base_game == "Flagle":
         return rank <= 1.0
-    if result["game"] == "Redactle":
+    if base_game == "Redactle":
         # Timer seconds are a fractional tiebreak, not extra guesses: 1g12s is FIRST TRY.
         return rank < 2.0
     return abs(rank - 1.0) < 1e-6

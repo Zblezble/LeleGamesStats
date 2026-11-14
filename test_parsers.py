@@ -24,6 +24,11 @@ CASES = [
     ("metazooa gave up",
      "Animal #1190\nI gave up after 30 guesses.",
      [("Metazooa", "#1190", 0, "DNF")]),
+    ("metazooa stumped at 20-guess limit",
+     "🦫 Animal #1202 🦝\nI was stumped by today's game!\n"
+     "🟧🟧🟥🟧🟧🟧🟨🟥🟨🟨🟨🟨🟨🟨🟨🟨🟨🟨🟥🟥\n"
+     "🔥 0 | Avg. Guesses: 5.8\n\nhttps://metazooa.com/\n#metazooa",
+     [("Metazooa", "#1202", 0, "DNF")]),
 
     # --- Centumth ---
     ("centumth",
@@ -151,6 +156,12 @@ CASES = [
     ("regionle failed",
      "Regionle #143 X/7\n⬛⬛⬛⬛⬛⬛⬛\nhttps://regionle.io/",
      [("Regionle", "#143", 0, "X/7")]),
+    ("regionle named special exhausts seven guesses",
+     "Regionle US States #148 X/7\n"
+     "⬛🟨🟨⬛⬛⬛🟩\n⬛🟨⬛⬛⬛⬛🟩\n⬛⬛🟨⬛🟩⬛🟩\n"
+     "🟨🟨🟨⬛⬛⬛⬛\n🟨🟨⬛⬛🟨⬛🟩\n⬛⬛⬛⬛🟩⬛🟩\n"
+     "⬛🟨🟨🟨🟨⬛🟩",
+     [("Regionle (US States)", "#148", 0, "X/7")]),
 
     ("roughly all-round symbol grid, not just best",
      "roughly · How big? #77\nHow wide is a giant Pacific octopus, arm tip to arm tip?\nMe: better than 99% of players\n▧■▣■■\n\nCan you beat me?\nhttps://roughly.is/d/cqsdamg898",

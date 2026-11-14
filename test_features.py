@@ -16,6 +16,7 @@ os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 import config
 import db
 import embeds
+import games
 import handlers
 
 
@@ -140,8 +141,17 @@ def test_ack_preserves_the_actual_result():
     assert "DNF" in actual_dnf, actual_dnf
 
 
+def test_named_regionle_special_keeps_base_game_policies():
+    """A named special remains a Regionle for icons and the selected prison games."""
+    result = {"game": "Regionle (US States)", "solved": 1, "rank_score": 1.0}
+    assert games.get_game_icon(result["game"]) == games.GAME_META["Regionle"]["icon"]
+    assert games.is_first_try(result)
+    assert not games.is_first_try({**result, "solved": 0, "rank_score": 99.0})
+
+
 if __name__ == "__main__":
     test_forfeit_requires_an_existing_entry()
     test_weekly_sums_daily_podiums_without_phantom_competition()
     test_ack_preserves_the_actual_result()
+    test_named_regionle_special_keeps_base_game_policies()
     print("All feature tests passed.")

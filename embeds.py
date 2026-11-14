@@ -312,15 +312,51 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
     return random.Random(f"{board_date}:line").choice(lines[kind])
 
 
+def _wrap_reels(standings: list[tuple[int, int]], names: dict[int, str]) -> tuple[str, list[str]]:
+    """Build narrow locked-result reels and full-name lines only when labels need them."""
+    placed = []
+    previous_points = None
+    rank = 0
+    for index, (uid, points) in enumerate(standings):
+        # Competition placement: equal totals share a rank and the next rank skips.
+        if index == 0 or points != previous_points:
+            rank = index + 1
+            previous_points = points
+        placed.append((rank, uid, points))
+
+    rank_width = max(2, *(len(str(rank)) for rank, _uid, _points in placed))
+    score_width = max(len(f"{points} pts") for _rank, _uid, points in placed)
+    width = 38
+    name_width = width - rank_width - score_width - 9
+    lines = ["=" * width, f"{'RESULTS LOCKED':^{width}}", "=" * width]
+    full_names = []
+
+    for rank, uid, points in placed:
+        original = names.get(uid, "Someone")
+        # Backticks and line breaks cannot be allowed to break the surrounding fence.
+        label = re.sub(r"\s+", " ", original).strip().replace("`", "'")
+        if len(label) > name_width:
+            label = label[:name_width - 1] + "…"
+        if label != original:
+            safe_name = discord.utils.escape_mentions(discord.utils.escape_markdown(original))
+            full_names.append(f"#{rank} {safe_name} · {points} pts")
+        lines.append(
+            f"[#{rank:>{rank_width}}] [{label:<{name_width}}] [{f'{points} pts':>{score_width}}]"
+        )
+
+    lines.append("=" * width)
+    return "```text\n" + "\n".join(lines) + "\n```", full_names
+
+
 def build_wrap_embed(board_date: str) -> discord.Embed | None:
-    """Locked-day wrap: turnout, game difficulty, final standings and winner's trophy."""
+    """Locked-day wrap: turnout, game difficulty, final reels and one placement comment."""
     grouped = _entries_by_game(board_date)
     if not grouped:
         return None
     mvp_points, names = compute_daily_points(board_date)
 
     embed = discord.Embed(
-        title=f"🏆 Yesterday's wrap · {config.date_label(board_date)}",
+        title=f"Yesterday's wrap · {config.date_label(board_date)}",
         color=0xF59E0B,
     )
 
@@ -338,7 +374,7 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     for (game, _pid), entries in grouped.items():
         # A one-person game says nothing about relative daily difficulty, and
         # incomparable score systems do not belong in a cross-game difficulty race.
-        if len(entries) < 2 or game not in DIFFICULTY_GAMES:
+        if len(entries) < 2 or game.split(" (", 1)[0] not in DIFFICULTY_GAMES:
             continue
         outcomes = sorted(
             _performance_fraction(game, solved, rscore, dscore)
@@ -359,17 +395,31 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
             )
 
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
-    if standings:
-        standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
-        embed.add_field(name="Final standings", value=standings_str, inline=False)
+    has_points_contest = len(players) > 1 and any(points > 0 for _uid, points in standings)
+    if has_points_contest:
+        reels, full_names = _wrap_reels(standings, names)
+        embed.add_field(name="Daily reels", value=reels, inline=False)
+        if full_names:
+            embed.add_field(name="Full names", value="\n".join(full_names), inline=False)
 
-        # One random placement commenter for the wrap, replacing separate
-        # winner-callout and last-place fields.
-        embed.add_field(name="\u200b", value=_wrap_comment(board_date, names, standings), inline=False)
+        # Keep the existing date-seeded target and line variety as the sole punchline.
+        embed.add_field(
+            name="Bonus reel",
+            value=_wrap_comment(board_date, names, standings),
+            inline=False,
+        )
     else:
         solo_players = sorted({uname for entries in grouped.values()
                                for _uid, uname, _s, _r, _d, _u in entries})
-        embed.add_field(name="\u200b", value="No points on the board. " + ", ".join(solo_players) + " played.", inline=False)
+        safe_players = [
+            discord.utils.escape_mentions(discord.utils.escape_markdown(name))
+            for name in solo_players
+        ]
+        embed.add_field(
+            name="Practice day",
+            value="No points awarded. " + ", ".join(safe_players) + " played.",
+            inline=False,
+        )
     return embed
 
 
@@ -427,7 +477,7 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
     # Same normalized, comparable-score handling as the daily wrap.
     rates = []
     for (game, _pid), entries in grouped.items():
-        if len(entries) < 2 or game not in DIFFICULTY_GAMES:
+        if len(entries) < 2 or game.split(" (", 1)[0] not in DIFFICULTY_GAMES:
             continue
         results = sorted(_performance_fraction(game, solved, rscore, dscore)
                          for _uid, _uname, solved, rscore, dscore, _url in entries)
