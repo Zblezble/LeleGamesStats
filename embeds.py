@@ -394,17 +394,18 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
     for _date, game, pid, uid, uname, solved, rscore, dscore, url in rows:
         grouped.setdefault((game, pid), []).append((uid, uname, solved, rscore, dscore, url))
 
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    # Sum the daily podiums rather than ranking every date as one "competitive"
+    # puzzle: this exactly preserves native scoring and cannot create a two-player
+    # competition from a single author's results across days.
     totals, names = {}, {}
-    for (game, _pid), entries in grouped.items():
-        graded = game in GRADED_GAMES
-        unique_scores = sorted({e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)})
-        for uid, uname, solved, rscore, _d, _u in entries:
-            competes = solved or (graded and rscore < 10000)
-            if competes:
-                names[uid] = uname
-                rank_idx = unique_scores.index(rscore)
-                if len(entries) >= 2 and rank_idx < 3:
-                    totals[uid] = totals.get(uid, 0.0) + (3 - rank_idx)
+    for offset in range((end_dt - start_dt).days + 1):
+        date_text = (start_dt + timedelta(days=offset)).strftime("%Y-%m-%d")
+        daily_points, daily_names = compute_daily_points(date_text)
+        for uid, points in daily_points.items():
+            if points:
+                totals[uid] = totals.get(uid, 0.0) + points
+                names[uid] = daily_names[uid]
 
     counters = {uid for entries in grouped.values() for uid, *_ in entries}
     game_names = {g for g, _ in grouped}
@@ -483,9 +484,9 @@ def build_missing_embed(user_id: int) -> discord.Embed:
 
     if missing:
         lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in ACTIVE_GAME_META.items() if name in missing]
-        embed.add_field(name=f"To play · {len(missing)}", value="\n".join(lines), inline=False)
+        _append_daily_fields(embed, [(f"To play · {len(missing)}", "\n".join(lines), False)])
     if played:
         lines = [f"{ACTIVE_GAME_META[name]['icon']} **{name}** · {played[name]}" for name in ACTIVE_GAME_META if name in played]
-        embed.add_field(name=f"Done · {len(played)}", value="\n".join(lines), inline=False)
+        _append_daily_fields(embed, [(f"Done · {len(played)}", "\n".join(lines), False)])
 
     return embed

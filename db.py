@@ -184,8 +184,13 @@ def remove_entries(board_date: str, game: str, puzzle_id: str, user_id: int | No
 
 def forfeit_entry(board_date: str, user_id: int, user_name: str, game_key: str):
     """Record a manual forfeit (DNF) for games with no built-in 'give up' share text.
-    Puzzle id follows whatever other players posted today for this game, else the date.
-    Returns (puzzle_id, overwritten_entry) after upserting."""
+
+    The puzzle id and any submode suffix are inferred from the most recent entry
+    someone else posted today for this game. Returns ``None`` when nobody has
+    played that game today, so a forfeit cannot invent a phantom score group.
+    Otherwise upserts the DNF (replacing this user's earlier entry if present)
+    and returns ``(puzzle_id, overwritten_entry)``.
+    """
     with sqlite3.connect(config.DB_PATH) as conn:
         c = conn.cursor()
         row = c.execute(
@@ -194,8 +199,9 @@ def forfeit_entry(board_date: str, user_id: int, user_name: str, game_key: str):
             " ORDER BY timestamp DESC LIMIT 1",
             (board_date, game_key, game_key)
         ).fetchone()
-        puzzle_id = row[0] if row else board_date
-        game = row[1] if row else game_key
+        if row is None:
+            return None
+        puzzle_id, game = row
         overwritten = c.execute(
             "SELECT 1 FROM scores WHERE board_date = ? AND game = ? AND puzzle_id = ? AND user_id = ?",
             (board_date, game, puzzle_id, user_id)

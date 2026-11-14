@@ -143,7 +143,7 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
     streak_line = f"Longest streak: {best_streak} days"
     if current_streak:
         streak_line += f" · current: {current_streak} days"
-    embed.add_field(name="Prison days", value=f"Lifetime total: {db.prison_count(target.id)}", inline=False)
+    embed.add_field(name="Streak", value=streak_line, inline=False)
 
     lines = []
     for game, (played, solved, crowns) in sorted(game_totals.items()):
@@ -238,8 +238,9 @@ async def remove_entry(interaction: discord.Interaction,
     if has_board:
         await handlers.update_or_post_daily_board(interaction.channel, board_date)
 
-    # Deletions by mods are announced publicly for transparency; self-/undo stays quiet.
-    await interaction.response.send_message(
+    # A deferred interaction must be completed through the follow-up webhook,
+    # not the already-used initial response (which would raise 500).
+    await interaction.followup.send(
         f"🧹 Removed {result['count']} entr{'y' if result['count'] == 1 else 'ies'}"
         f" · {', '.join(result['games'])} {', '.join(result['puzzle_ids'])} · {board_date}"
         f" · {', '.join(result['users'])} · by {interaction.user.display_name}"
@@ -256,8 +257,16 @@ async def forfeit(interaction: discord.Interaction, game: str):
         return
 
     board_date = today_str()
-    puzzle_id, overwritten = db.forfeit_entry(board_date, interaction.user.id,
-                                              interaction.user.display_name, key)
+    entry = db.forfeit_entry(board_date, interaction.user.id,
+                             interaction.user.display_name, key)
+    if entry is None:
+        await interaction.response.send_message(
+            f"No **{key}** result logged today yet — forfeits need an existing "
+            "puzzle to join.",
+            ephemeral=True
+        )
+        return
+    puzzle_id, overwritten = entry
     db.log_ingest(board_date, interaction.user.id, interaction.user.display_name,
                   f"/forfeit {game}", f"DNF {key} {puzzle_id}", "forfeit")
     await interaction.response.defer(ephemeral=True)

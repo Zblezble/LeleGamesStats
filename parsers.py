@@ -197,7 +197,10 @@ def parse_all_games(text: str) -> list[dict]:
         submode = m.group(1).strip().rstrip("?")
         pid = m.group(2)
         pct = int(m.group(4))
-        score = float(pct)
+        # No-grid shares carry a percentage, not a ratio.
+        # Bucketed grid shares already carry a 0..1 estimate.
+        # Normalize both to the same scale before comparing them.
+        score = pct / 100.0
         display = f"Top {100 - pct}% ({pct}%)"
 
         # Restrict grid and duel-link parsing to this share only, never the next result.
