@@ -121,6 +121,11 @@ CASES = [
     ("magnitudle",
      "Magnitudle — Size It Up\n2026-11-03\n\nScore: 199/500\n\n🟥🟥🟥🟥⬜ 75\n⬜⬜⬜⬜⬜ 0\n\nhttps://magnitudle.com/size-it-up",
      [("Magnitudle (Size It Up)", "2026-11-03", 1, "199/500")]),
+    ("magnitudle current Size It Up serial header",
+     "Size It Up\r#98\r\rScore: 230/500\r\n"
+     "🟥⬜⬜⬜⬜ 28\n🟥🟥⬜⬜⬜ 47\n🟥🟥🟥🟥🟥 100\n"
+     "⬜⬜⬜⬜⬜ 5\n🟥🟥🟥⬜⬜ 50\n\nhttps://magnitudle.com/size-it-up",
+     [("Magnitudle (Size It Up)", "#98", 1, "230/500")]),
 
     # --- Majority ---
     ("majority",
@@ -254,6 +259,9 @@ RANK_CASES = [
     ("history uses the native total, not a hardcoded one",
      "History in Order №300 · 8/10",
      [("History in Order", "#300", 0, -8.0, "8/10")]),
+    ("magnitudle current serial header ranks higher points better",
+     "Size It Up\n#98\nScore: 230/500",
+     [("Magnitudle (Size It Up)", "#98", 1, -230.0, "230/500")]),
 ]
 
 

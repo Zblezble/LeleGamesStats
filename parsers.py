@@ -293,6 +293,22 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # Current Size It Up shares omit the "Magnitudle —" prefix and use a
+    # numeric puzzle id instead of an ISO date. Allow blank/CRLF-separated lines.
+    for m in re.finditer(
+        r"^[ \t]*Size It Up\s+#(\d+)\s+Score:\s*(\d+)/500",
+        text, re.IGNORECASE | re.MULTILINE
+    ):
+        pid, pts = m.group(1), int(m.group(2))
+        results.append({
+            "game": "Magnitudle (Size It Up)",
+            "puzzle_id": f"#{pid}",
+            "solved": 1 if pts > 0 else 0,
+            "rank_score": float(-pts),
+            "display_score": f"{pts}/500",
+            "extra_url": None
+        })
+
     # 12. MAJORITY (Majority #64 \n ☆⭐☆☆⭐ \n 2/5 majorities · 52% crowd sync)
     # The percentage may be mangled ("64kkk%") — tolerate a few junk chars before "%".
     for m in re.finditer(

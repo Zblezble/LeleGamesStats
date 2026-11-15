@@ -1,8 +1,10 @@
 """Discord event wiring: message ingestion flow and daily board maintenance."""
 import asyncio
+import io
 import random
 import sqlite3
 from datetime import datetime, timedelta
+from urllib.request import Request, urlopen
 
 import discord
 
@@ -11,6 +13,10 @@ import db
 import embeds
 import games
 import parsers
+
+_GIF_TIMEOUT_SECONDS = 10
+_GIF_MAX_BYTES = 5 * 1024 * 1024
+_MEME_GIF_CACHE: dict[str, bytes] = {}
 
 
 def _meme_numbers(parsed_games: list[dict]) -> list[int]:
@@ -26,6 +32,54 @@ def _meme_numbers(parsed_games: list[dict]) -> list[int]:
             if special in games.MEME_SCORES:
                 hits.add(special)
     return sorted(hits)
+
+
+def _download_gif(url: str) -> bytes:
+    """Fetch one curated GIF with a bounded read and basic content validation."""
+    request = Request(url, headers={"User-Agent": "LeleGamesStats/1.0"})
+    with urlopen(request, timeout=_GIF_TIMEOUT_SECONDS) as response:
+        status = getattr(response, "status", 200)
+        if status != 200:
+            raise ValueError(f"HTTP {status}")
+
+        content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if content_type != "image/gif":
+            raise ValueError(f"unexpected Content-Type {content_type!r}")
+
+        payload = response.read(_GIF_MAX_BYTES + 1)
+
+    if len(payload) > _GIF_MAX_BYTES:
+        raise ValueError(f"gif exceeds {_GIF_MAX_BYTES} bytes")
+    if not payload.startswith((b"GIF87a", b"GIF89a")):
+        raise ValueError("missing GIF magic header")
+    return payload
+
+
+async def _meme_gif(url: str) -> bytes | None:
+    """Return validated GIF bytes, caching the curated immutable payloads."""
+    cached = _MEME_GIF_CACHE.get(url)
+    if cached is not None:
+        return cached
+    try:
+        payload = await asyncio.to_thread(_download_gif, url)
+    except Exception as e:
+        print(f"Warning: could not retrieve curated gif {url}: {e}")
+        return None
+    _MEME_GIF_CACHE[url] = payload
+    return payload
+
+
+async def _post_meme(channel, special: int, user_name: str, effect: dict):
+    """Post the curated GIF as an attachment; use the old link only as fallback."""
+    caption = f"{user_name} · {special} · {effect['caption']}"
+    gif_bytes = await _meme_gif(effect["url"])
+    if gif_bytes is None:
+        await channel.send(f"{caption}\n{effect['url']}")
+        return
+    await channel.send(
+        caption,
+        file=discord.File(io.BytesIO(gif_bytes), filename=f"meme-{special}.gif"),
+    )
 
 
 def _prison_comment(board_date: str, user_name: str, game: str) -> str:
@@ -281,9 +335,9 @@ def register(bot):
         for special in _meme_numbers(parsed_games):
             effect = games.MEME_SCORES[special]
             try:
-                # Direct URL lets Discord own the preview, rather than relying on a
-                # custom embed's externally-fetched image being rendered.
-                await message.channel.send(f"{user_name} · {special} · {effect['caption']}\n{effect['url']}")
+                # Upload curated bytes so Discord renders the GIF instead of a generic
+                # external-link card; _post_meme falls back to the direct URL on failure.
+                await _post_meme(message.channel, special, user_name, effect)
             except discord.HTTPException as e:
                 print(f"Warning: failed to post gif for {special}: {e}")
 

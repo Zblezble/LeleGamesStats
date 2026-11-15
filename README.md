@@ -12,7 +12,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 - New daily boards are pinned automatically; older digest boards from the same channel are unpinned when the new one is posted (other pins and yesterday's wrap are untouched). Requires the **Manage Messages** permission.
 - When the first board of a new day appears, publishes yesterday's locked wrap above it: player turnout, playful easiest/hardest verdicts from comparable scored games only, final standings, and one playful placement comment (randomly a winner, silver, mid-pack, second-last or last). Skipped on days with no scores; posted once per date.
 - Logs every successfully parsed message to the `ingest_log` table (raw text + user) – the audit trail and data source for `/undo`. Run with `--debug` (or `DEBUG_LOG=1`) to also dump them to the console.
-- Easter egg: exact integer results of `42`, `67`, `69`, or `420` get a public, curated gif reaction (de-duplicated per paste, ignoring puzzle ids and dates). Any broken/unformatted score text stays untouched.
+- Easter egg: exact integer results of `42`, `67`, `69`, or `420` get a public, curated gif reaction (de-duplicated per paste, ignoring puzzle ids and dates). The gif is uploaded as an attachment so it renders reliably; if retrieval fails, the bot falls back to posting the direct link. Any broken/unformatted score text stays untouched.
 - Awards daily points per game (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt, ties share placement; games with ≥2 players) plus a standings summary on the board.
 - Slash commands:
   - `/h2h <opponent> [player1]` – head-to-head record across all shared puzzles.
@@ -38,7 +38,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 
 2. Create a Discord application/bot at <https://discord.com/developers/applications>.
    - Enable the **Message Content** and **Server Members** privileged intents.
-   - Invite it with `bot` + `applications.commands` scopes and permissions: Send Messages, Manage Messages (to delete raw pastes), Embed Links, Read Message History.
+   - Invite it with `bot` + `applications.commands` scopes and permissions: Send Messages, Attach Files (for curated gif uploads), Manage Messages (to delete raw pastes), Embed Links, Read Message History.
 
 3. Set environment variables:
 
