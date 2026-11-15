@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Focused regressions for the static daily wrap and its locked-result reels.
+"""Focused regressions for daily wrap standings, difficulty scores and quiet days.
 
 Run: python -X utf8 test_wrap.py   (exits 1 on failure)
 All database cases use explicit rows in a temporary schema-aware SQLite file.
 """
 import os
-import re
 import sqlite3
 import sys
 import tempfile
@@ -57,42 +56,19 @@ def field(embed, name):
     return value
 
 
-def reel_lines(value):
-    lines = value.splitlines()
-    assert lines[0] == "```text" and lines[-1] == "```", value
-    body = lines[1:-1]
-    assert body and "RESULTS LOCKED" in body[1], body
-    assert all("`" not in line for line in body), body
-    # Rough width algebra on generated text, including every actual result row.
-    assert all(len(line) <= 42 for line in body), [len(line) for line in body]
-    assert len({len(line) for line in body}) == 1, [len(line) for line in body]
-    return body
-
-
-def reel_results(value):
-    results = []
-    for line in reel_lines(value):
-        match = re.fullmatch(r"\[#\s*(\d+)\] \[(.*)\] \[([^]]+) pts\]", line)
-        if match:
-            results.append((int(match.group(1)), match.group(2).strip(), match.group(3)))
-    assert results, value
-    return results
-
-
 def assert_practice_day(embed, expected_names):
     names = [item.name for item in embed.fields]
     assert "Practice day" in names, names
-    assert "Daily reels" not in names and "Bonus reel" not in names, names
+    assert "Final standings" not in names and "\u200b" not in names, names
+    assert embed.fields[-1].name == "Practice day"
     value = field(embed, "Practice day")
     assert value.startswith("No points awarded."), value
     for name in expected_names:
         safe_name = discord.utils.escape_mentions(discord.utils.escape_markdown(name))
         assert safe_name in value, (name, value)
-    combined = "\n".join(item.value or "" for item in embed.fields)
-    assert "RESULTS LOCKED" not in combined and "```" not in combined, combined
 
 
-def test_ordinary_reels_preserve_standings_and_unfiltered_comment():
+def test_ordinary_standings_preserve_order_and_unfiltered_comment():
     old_path, old_prison, path = fresh_db()
     original_comment = embeds._wrap_comment
     calls = []
@@ -115,30 +91,30 @@ def test_ordinary_reels_preserve_standings_and_unfiltered_comment():
         embed = embeds.build_wrap_embed(day)
         assert embed is not None
         assert calls == [(day, expected_names, expected_standings)], calls
-        assert reel_results(field(embed, "Daily reels")) == [
-            (1, "Alice", "3"),
-            (1, "Dan", "3"),
-            (3, "Bob", "2"),
-            (3, "Erin", "2"),
-            (5, "Cara", "1"),
-        ]
+        assert embed.title == "🏆 Yesterday's wrap · Mon 3 Mar"
+        assert field(embed, "Final standings") == (
+            "Alice `3` · Dan `3` · Bob `2` · Erin `2` · Cara `1`"
+        )
+        assert not {"Daily reels", "Full names", "Bonus reel"}.intersection(
+            item.name for item in embed.fields
+        )
 
-        # One unchanged date-seeded comment, after all standings and fallbacks.
-        assert embed.fields[-1].name == "Bonus reel"
+        # One unchanged date-seeded comment, immediately after the standings.
+        assert embed.fields[-1].name == "\u200b"
         expected_comment = original_comment(day, expected_names, expected_standings)
-        assert field(embed, "Bonus reel") == expected_comment
-        assert sum(item.name == "Bonus reel" for item in embed.fields) == 1
+        assert embed.fields[-1].value == expected_comment
+        assert sum(item.name == "\u200b" for item in embed.fields) == 1
     finally:
         embeds._wrap_comment = original_comment
         cleanup(old_path, old_prison, path)
 
 
-def test_tied_placements_include_fully_identical_totals():
+def test_tied_totals_keep_existing_order_and_points():
     old_path, old_prison, path = fresh_db()
     tied_day = "2025-03-04"
     identical_day = "2025-03-05"
     try:
-        # Alice and Bob tie at five; Cara follows at two with competition rank 3.
+        # Alice and Bob tie at five while retaining the established name ordering.
         for puzzle_id, ranks in (
             ("#10", {1: 1, 2: 2, 3: 3}),
             ("#11", {1: 2, 2: 1, 3: 3}),
@@ -150,9 +126,7 @@ def test_tied_placements_include_fully_identical_totals():
         assert points == {1: 5, 2: 5, 3: 2}, points
         tied = embeds.build_wrap_embed(tied_day)
         assert tied is not None
-        assert reel_results(field(tied, "Daily reels")) == [
-            (1, "Alice", "5"), (1, "Bob", "5"), (3, "Cara", "2")
-        ]
+        assert field(tied, "Final standings") == "Alice `5` · Bob `5` · Cara `2`"
 
         # Both games together give every player exactly three points.
         names = {1: "Alice", 2: "Bob", 3: "Cara", 4: "Dan"}
@@ -166,17 +140,17 @@ def test_tied_placements_include_fully_identical_totals():
         assert points == {1: 3, 2: 3, 3: 3, 4: 3}, points
         identical = embeds.build_wrap_embed(identical_day)
         assert identical is not None
-        assert reel_results(field(identical, "Daily reels")) == [
-            (1, "Alice", "3"), (1, "Bob", "3"), (1, "Cara", "3"), (1, "Dan", "3")
-        ]
+        assert field(identical, "Final standings") == (
+            "Alice `3` · Bob `3` · Cara `3` · Dan `3`"
+        )
     finally:
         cleanup(old_path, old_prison, path)
 
 
-def test_long_and_backtick_names_are_safe_with_full_name_fallback():
+def test_final_standings_keep_full_names_without_reel_fallbacks():
     old_path, old_prison, path = fresh_db()
     day = "2025-03-06"
-    long_name = "Alexandria with a name far too long for the reel"
+    long_name = "Alexandria with a name too long for the old reel"
     tick_name = "Tick```Name"
     try:
         add_score(day, 1, long_name, "#30", 1)
@@ -184,20 +158,12 @@ def test_long_and_backtick_names_are_safe_with_full_name_fallback():
         add_score(day, 3, "Cara", "#30", 3)
         embed = embeds.build_wrap_embed(day)
         assert embed is not None
-        body = reel_lines(field(embed, "Daily reels"))
-        visual = "\n".join(body)
-        assert long_name not in visual and tick_name not in visual
-        assert "Tick'''Name" in visual and "Cara" in visual
-
-        fallback = field(embed, "Full names").splitlines()
-        assert len(fallback) == 2, fallback
-        safe_long = discord.utils.escape_markdown(long_name)
-        safe_tick = discord.utils.escape_markdown(tick_name)
-        assert fallback[0].startswith("#1 ") and safe_long in fallback[0]
-        assert "3 pts" in fallback[0]
-        assert fallback[1].startswith("#2 ") and safe_tick in fallback[1]
-        assert "2 pts" in fallback[1]
-        assert embed.fields[-1].name == "Bonus reel"
+        standings = field(embed, "Final standings")
+        assert f"{long_name} `3`" in standings
+        assert f"{tick_name} `2`" in standings
+        assert "Cara `1`" in standings
+        assert "Full names" not in {item.name for item in embed.fields}
+        assert embed.fields[-1].name == "\u200b"
     finally:
         cleanup(old_path, old_prison, path)
 
@@ -222,7 +188,7 @@ def test_solo_and_multiplayer_no_point_days_are_quiet():
         cleanup(old_path, old_prison, path)
 
 
-def test_all_zero_board_has_no_reel_or_roast():
+def test_all_zero_board_has_no_standings_or_roast():
     old_path, old_prison, path = fresh_db()
     day = "2025-03-09"
     config.PRISON_ENABLED = True
@@ -240,10 +206,48 @@ def test_all_zero_board_has_no_reel_or_roast():
         cleanup(old_path, old_prison, path)
 
 
+def test_difficulty_comments_include_selected_daily_and_weekly_medians():
+    old_path, old_prison, path = fresh_db()
+    old_today = config.today_str
+    day = "2025-03-10"
+    config.today_str = lambda: "2025-03-11"
+    try:
+        # Wordle medians: (1 + 5/6) / 2 and (2/6 + 1/6) / 2.
+        add_score(day, 1, "Alice", "#60", 1)
+        add_score(day, 2, "Bob", "#60", 2)
+        add_score(day, 1, "Alice", "#61", 5)
+        add_score(day, 2, "Bob", "#61", 6)
+
+        daily = embeds.build_wrap_embed(day)
+        weekly = embeds.build_weekly_embed(days=7)
+        assert daily is not None and weekly is not None
+        for verdict in (field(daily, "Game difficulty"), field(weekly, "Game difficulty")):
+            lines = verdict.splitlines()
+            assert len(lines) == 4, lines
+            assert lines[0].startswith("Easiest: **Wordle**"), lines
+            assert lines[1] == "Median score: 91.7%", lines
+            assert lines[2].startswith("Hardest: **Wordle**"), lines
+            assert lines[3] == "Median score: 25.0%", lines
+    finally:
+        config.today_str = old_today
+        cleanup(old_path, old_prison, path)
+
+
+def test_regionle_named_modes_use_the_regionle_scale():
+    expected = 1 - (4 - 1) / 7
+    base = embeds._performance_fraction("Regionle", 1, 4, "4/7")
+    named_mode = embeds._performance_fraction("Regionle (US States)", 1, 4, "4/7")
+    assert base == expected
+    assert named_mode == expected
+    assert named_mode != (7 - 4) / 6  # Not the generic six-try fallback.
+
+
 if __name__ == "__main__":
-    test_ordinary_reels_preserve_standings_and_unfiltered_comment()
-    test_tied_placements_include_fully_identical_totals()
-    test_long_and_backtick_names_are_safe_with_full_name_fallback()
+    test_ordinary_standings_preserve_order_and_unfiltered_comment()
+    test_tied_totals_keep_existing_order_and_points()
+    test_final_standings_keep_full_names_without_reel_fallbacks()
     test_solo_and_multiplayer_no_point_days_are_quiet()
-    test_all_zero_board_has_no_reel_or_roast()
+    test_all_zero_board_has_no_standings_or_roast()
+    test_difficulty_comments_include_selected_daily_and_weekly_medians()
+    test_regionle_named_modes_use_the_regionle_scale()
     print("All wrap tests passed.")

@@ -201,7 +201,7 @@ def _performance_fraction(game: str, solved: int, rank_score: float, display_sco
         return 1 / max(1.0, 1 + rank_score)
     if game in {"Metazooa", "Globle", "Redactle"}:
         return 1 / max(1.0, abs(rank_score))
-    if game == "Regionle":
+    if game.startswith("Regionle"):
         return max(0.0, min(1.0, (1 - (rank_score - 1) / 7)))
     # Guess-type games: tries (and hint penalties) translate through a 6-point scale.
     return max(0.0, min(1.0, (7 - rank_score) / 6))
@@ -229,8 +229,8 @@ def _prison_group(start_date: str, end_date: str):
     return label, "\n".join(lines)
 
 
-def _difficulty_comment(board_date: str, level: str, candidates: list[str]) -> str:
-    """A playful difficulty verdict for a day, using no opaque cross-game percentages."""
+def _difficulty_comment(board_date: str, level: str, candidates: list[str], score: float) -> str:
+    """A playful difficulty verdict with the normalized median that selected it."""
     name = random.Random(f"{board_date}:{level}:game").choice(candidates)
     lines = {
         "easiest": (
@@ -246,7 +246,8 @@ def _difficulty_comment(board_date: str, level: str, candidates: list[str]) -> s
             f"Hardest: **{name}** took lunch money and half the afternoon.",
         ),
     }
-    return random.Random(f"{board_date}:{level}:line").choice(lines[level])
+    comment = random.Random(f"{board_date}:{level}:line").choice(lines[level])
+    return f"{comment}\nMedian score: {score:.1%}"
 
 
 def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[int, int]]) -> str:
@@ -312,51 +313,15 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
     return random.Random(f"{board_date}:line").choice(lines[kind])
 
 
-def _wrap_reels(standings: list[tuple[int, int]], names: dict[int, str]) -> tuple[str, list[str]]:
-    """Build narrow locked-result reels and full-name lines only when labels need them."""
-    placed = []
-    previous_points = None
-    rank = 0
-    for index, (uid, points) in enumerate(standings):
-        # Competition placement: equal totals share a rank and the next rank skips.
-        if index == 0 or points != previous_points:
-            rank = index + 1
-            previous_points = points
-        placed.append((rank, uid, points))
-
-    rank_width = max(2, *(len(str(rank)) for rank, _uid, _points in placed))
-    score_width = max(len(f"{points} pts") for _rank, _uid, points in placed)
-    width = 38
-    name_width = width - rank_width - score_width - 9
-    lines = ["=" * width, f"{'RESULTS LOCKED':^{width}}", "=" * width]
-    full_names = []
-
-    for rank, uid, points in placed:
-        original = names.get(uid, "Someone")
-        # Backticks and line breaks cannot be allowed to break the surrounding fence.
-        label = re.sub(r"\s+", " ", original).strip().replace("`", "'")
-        if len(label) > name_width:
-            label = label[:name_width - 1] + "…"
-        if label != original:
-            safe_name = discord.utils.escape_mentions(discord.utils.escape_markdown(original))
-            full_names.append(f"#{rank} {safe_name} · {points} pts")
-        lines.append(
-            f"[#{rank:>{rank_width}}] [{label:<{name_width}}] [{f'{points} pts':>{score_width}}]"
-        )
-
-    lines.append("=" * width)
-    return "```text\n" + "\n".join(lines) + "\n```", full_names
-
-
 def build_wrap_embed(board_date: str) -> discord.Embed | None:
-    """Locked-day wrap: turnout, game difficulty, final reels and one placement comment."""
+    """Locked-day wrap: turnout, game difficulty, final standings and one placement comment."""
     grouped = _entries_by_game(board_date)
     if not grouped:
         return None
     mvp_points, names = compute_daily_points(board_date)
 
     embed = discord.Embed(
-        title=f"Yesterday's wrap · {config.date_label(board_date)}",
+        title=f"🏆 Yesterday's wrap · {config.date_label(board_date)}",
         color=0xF59E0B,
     )
 
@@ -389,25 +354,19 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
             hardest_games = [r[0] for r in hits if r[1] == lowest]
             embed.add_field(
                 name="Game difficulty",
-                value=f"{_difficulty_comment(board_date, 'easiest', easiest_games)}\n"
-                      f"{_difficulty_comment(board_date, 'hardest', hardest_games)}",
+                value=f"{_difficulty_comment(board_date, 'easiest', easiest_games, highest)}\n"
+                      f"{_difficulty_comment(board_date, 'hardest', hardest_games, lowest)}",
                 inline=False,
             )
 
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
     has_points_contest = len(players) > 1 and any(points > 0 for _uid, points in standings)
     if has_points_contest:
-        reels, full_names = _wrap_reels(standings, names)
-        embed.add_field(name="Daily reels", value=reels, inline=False)
-        if full_names:
-            embed.add_field(name="Full names", value="\n".join(full_names), inline=False)
+        standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
+        embed.add_field(name="Final standings", value=standings_str, inline=False)
 
         # Keep the existing date-seeded target and line variety as the sole punchline.
-        embed.add_field(
-            name="Bonus reel",
-            value=_wrap_comment(board_date, names, standings),
-            inline=False,
-        )
+        embed.add_field(name="\u200b", value=_wrap_comment(board_date, names, standings), inline=False)
     else:
         solo_players = sorted({uname for entries in grouped.values()
                                for _uid, uname, _s, _r, _d, _u in entries})
@@ -489,9 +448,9 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
         if high != low:
             embed.add_field(
                 name="Game difficulty",
-                value=_difficulty_comment(end_text, "easiest", [r[0] for r in meaningful if r[1] == high])
+                value=_difficulty_comment(end_text, "easiest", [r[0] for r in meaningful if r[1] == high], high)
                       + "\n"
-                      + _difficulty_comment(end_text, "hardest", [r[0] for r in meaningful if r[1] == low]),
+                      + _difficulty_comment(end_text, "hardest", [r[0] for r in meaningful if r[1] == low], low),
                 inline=False,
             )
 
