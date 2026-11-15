@@ -460,6 +460,49 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
     return embed
 
 
+def _checklist_fields(base_name: str, lines: list[str]) -> list[tuple[str, str, bool]]:
+    """Render one checklist section, partitioning at game-line boundaries when needed.
+
+    Short sections keep their historical single-field name, so ordinary /missing
+    output is unchanged. A section too long for one field's value limit becomes
+    consecutive fields titled "<base_name> (1/N)", "<base_name> (2/N)", ... Each
+    game line stays intact, including its Markdown and link, and keeps its original
+    order. Only an individual impossible line is clamped with the same safe
+    ellipsis rule used elsewhere, rather than dropping content unnoticed.
+    """
+    if not lines:
+        return []
+
+    def clamp(line: str) -> str:
+        return line if len(line) <= 1024 else line[:1021] + "…"
+
+    # Fast path: unchanged rendering for lists that fit in one field.
+    value = "\n".join(lines)
+    if len(value) <= 1024:
+        return [(base_name, value, False)]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for raw_line in lines:
+        line = clamp(raw_line)
+        added = len(line) if not current else len(line) + 1  # newline separator
+        if current and current_len + added > 1024:
+            chunks.append("\n".join(current))
+            current, current_len = [line], len(line)
+        else:
+            current.append(line)
+            current_len += added
+    if current:
+        chunks.append("\n".join(current))
+
+    total = len(chunks)
+    return [
+        (f"{base_name} ({index}/{total})", chunk, False)
+        for index, chunk in enumerate(chunks, 1)
+    ]
+
+
 def build_missing_embed(user_id: int) -> discord.Embed:
     """Personal daily checklist: games played today vs. still to play (with links)."""
     board_date = config.today_str()
@@ -491,11 +534,14 @@ def build_missing_embed(user_id: int) -> discord.Embed:
     elif not missing:
         embed.description = f"All {available_today} games played today. See you tomorrow."
 
+    candidates = []
     if missing:
         lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in ACTIVE_GAME_META.items() if name in missing]
-        _append_daily_fields(embed, [(f"To play · {len(missing)}", "\n".join(lines), False)])
+        candidates.extend(_checklist_fields(f"To play · {len(missing)}", lines))
     if played:
         lines = [f"{ACTIVE_GAME_META[name]['icon']} **{name}** · {played[name]}" for name in ACTIVE_GAME_META if name in played]
-        _append_daily_fields(embed, [(f"Done · {len(played)}", "\n".join(lines), False)])
+        candidates.extend(_checklist_fields(f"Done · {len(played)}", lines))
+    # One call keeps both sections inside the same field-count/total-size budget.
+    _append_daily_fields(embed, candidates)
 
     return embed

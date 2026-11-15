@@ -465,6 +465,27 @@ def parse_all_games(text: str) -> list[dict]:
             "extra_url": None
         })
 
+    # 21. MAPTAP (www.maptap.gg November 15 · emoji-annotated round values ·
+    # Final score: 863). The final score is the only authoritative result; the
+    # per-round values are not summed. Higher final score is better, so rank_score
+    # is negated. A completed share of 0 is still a finished result, and the
+    # native header date is kept as-is (no invented year).
+    for m in re.finditer(
+        r"(?:www\.)?maptap\.gg\s+([A-Za-z]+ \d{1,2})[^\n]*\r?\n"
+        r"(?:[^\n]*\r?\n){0,3}?Final score:\s*([\d,]+)",
+        text, re.IGNORECASE
+    ):
+        date_str, pts_text = m.group(1), m.group(2)
+        pts = int(pts_text.replace(",", ""))
+        results.append({
+            "game": "Maptap",
+            "puzzle_id": date_str,
+            "solved": 1,  # A published final score is a completed run, including 0.
+            "rank_score": float(-pts),  # Higher final score = lower rank_score.
+            "display_score": f"{pts_text} pts",
+            "extra_url": None
+        })
+
     if config.DISABLED_GAMES:
         results = [r for r in results
                    if not any(r["game"].lower().startswith(d) for d in config.DISABLED_GAMES)]

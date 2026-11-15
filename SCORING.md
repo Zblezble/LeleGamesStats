@@ -57,6 +57,7 @@ In the table below, **lower rank_score wins**. Where a value contributes to the 
 | **History in Order** | `placements` | Fewer placements wins. Complete means placed == total recognized events (e.g. 6/6); incomplete is 99. |
 | **Tradle** | `tries` | Fewer tries wins. DNF is 99. |
 | **Chessle** | `attempts + 0.000001 × seconds` | Attempts dominate, elapsed time is a small tiebreak. The level (e.g. Medium) is preserved in the game name. |
+| **Maptap** | `-final score` | The published **final score** is the only authoritative result; higher is better. The preceding emoji-annotated values are not summed. A completed share with a final score of 0 is still a finished result, not a DNF. Excluded from cross-game difficulty because its score maximum and comparability are not established. |
 
 A compact summary of the typical guess-style games is: **fewer guesses / attempts wins**; the exact failure fallback varies by game (99, 999, or 10000).
 
@@ -82,7 +83,7 @@ This normalization is intentionally a **heuristic for our own summary**, not a c
 ### Eligibility and safeguards
 
 - **At least two players must compete on the game.** Solo results are not used to decide hardest/easiest.
-- Games with **comparable score schemes only** participate. Redactle, Metazooa, Globle, Travle and Roughly are left out of cross-game difficulty unless specifically evaluated by a parser that makes sense.
+- Games with **comparable score schemes only** participate. Redactle, Metazooa, Globle, Travle, Roughly and Maptap are left out of cross-game difficulty unless specifically evaluated by a parser that makes sense.
 - Only **positive performance fractions** are used. A zero result cannot win a difficulty slot.
 - All difficulty fields respect Discord’s limits: fields are each capped and merged where needed rather than rejected by the API.
 

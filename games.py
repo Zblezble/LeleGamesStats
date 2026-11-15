@@ -25,6 +25,7 @@ GAME_META = {
     "History in Order": {"icon": "🕰️", "desc": "put seven events in order with 3 chances", "url": "https://wordle.global/en/history-order"},
     "Tradle": {"icon": "🚢", "desc": "guess which country exports the goods", "url": "https://tradle.net/"},
     "Chessle": {"icon": "♞", "desc": "solve a chess position in six attempts", "url": "https://wordle.global/en/chessle"},
+    "Maptap": {"icon": "📍", "desc": "daily geography puzzle", "url": "https://maptap.gg/"},
 }
 
 

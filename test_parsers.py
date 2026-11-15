@@ -15,6 +15,18 @@ os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from parsers import parse_all_games  # noqa: E402
 
+# Maptap shares reused by both the compact cases and the explicit rank_score checks.
+MAPTAP_SHARE = (
+    "www.maptap.gg November 15\n\n"
+    "86🎓 88🎉 100🎯 83🌟 80👏\n"
+    "Final score: 863"
+)
+MAPTAP_ZERO_SHARE = (
+    "www.maptap.gg December 3\r\n\r\n"
+    "100🎓 92🎉 100🎯 88🌟 95👏\r\n"
+    "Final score: 0"
+)
+
 # (case name, paste text, expected results as (game, puzzle_id, solved, display_score))
 CASES = [
     # --- Metazooa ---
@@ -203,6 +215,14 @@ CASES = [
      "Chessle №216 · Medium · X/6 · 1m 54s\nhttps://wordle.global/en/chessle",
      [("Chessle (Medium)", "#216", 0, "X/6 · 1m 54s")]),
 
+    # --- Maptap ---
+    ("maptap",
+     MAPTAP_SHARE,
+     [("Maptap", "November 15", 1, "863 pts")]),
+    ("maptap zero is completed, non-hardcoded date (CRLF)",
+     MAPTAP_ZERO_SHARE,
+     [("Maptap", "December 3", 1, "0 pts")]),
+
     ("roughly multiple results with independent paths",
      "roughly · Where from? #306\nWhich country?\nMe: better than 97% of players\nroughly · Where from? #307\nWhich country?\nMe: better than 24% of players\n■■\nhttps://roughly.is/d/second123",
      [("Roughly (Where from)", "#306", 1, "Top 3% (97%)"),
@@ -212,6 +232,19 @@ CASES = [
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),
     ("trivmount chat mention", "hey did you play Trivmount #40 guys", []),
+]
+
+
+# The compact CASES tuples don't expose rank_score, so verify the ranking key
+# explicitly for games where "higher result is better" could be inverted.
+# (case name, paste text, expected (game, puzzle_id, solved, rank_score, display_score))
+RANK_CASES = [
+    ("maptap ranks final score higher-is-better",
+     MAPTAP_SHARE,
+     [("Maptap", "November 15", 1, -863.0, "863 pts")]),
+    ("maptap zero is completed, not DNF",
+     MAPTAP_ZERO_SHARE,
+     [("Maptap", "December 3", 1, 0.0, "0 pts")]),
 ]
 
 
@@ -229,7 +262,20 @@ def main() -> int:
         else:
             printable = [f"{g} {d}" for g, _, _, d in expected] or ["(no match)"]
             print(f"ok   {name}: {', '.join(printable)}")
-    print(f"\n{len(CASES) - failures}/{len(CASES)} cases passed")
+    for name, text, expected in RANK_CASES:
+        got = parse_all_games(text)
+        got_tuples = [(g["game"], g["puzzle_id"], g["solved"], g["rank_score"], g["display_score"]) for g in got]
+        if got_tuples != expected:
+            failures += 1
+            print(f"FAIL {name} (rank_score)")
+            print(f"  text:     {text!r}")
+            print(f"  expected: {expected}")
+            print(f"  got:      {got_tuples}")
+        else:
+            printable = [f"{g} rank={r} {d}" for g, _, _, r, d in expected] or ["(no match)"]
+            print(f"ok   {name}: {', '.join(printable)}")
+    total = len(CASES) + len(RANK_CASES)
+    print(f"\n{total - failures}/{total} cases passed")
     return 1 if failures else 0
 
 
