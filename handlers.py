@@ -322,7 +322,9 @@ def register(bot):
             if names and user_id in mvp_points:
                 standing = sorted(mvp_points.items(), key=lambda x: x[1], reverse=True)
                 pos = [i + 1 for i, (u, _) in enumerate(standing) if u == user_id][0]
-                lines.append(f"Daily: {pos}. · `{mvp_points[user_id]} pts`")
+                lines.append(
+                    f"Daily: currently #{pos} today, with `{mvp_points[user_id]}` total daily points."
+                )
 
         ack = await message.channel.send("\n".join(lines))
         asyncio.create_task(_self_destruct(ack, 12))
