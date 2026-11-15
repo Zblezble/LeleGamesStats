@@ -417,11 +417,15 @@ def parse_all_games(text: str) -> list[dict]:
     ):
         pid, placed, total = m.group(1), int(m.group(2)), int(m.group(3))
         solved = 1 if total > 0 and placed == total else 0
+        # More correctly placed events wins, including partial runs. Negative
+        # placements keep lower-is-better ordering; display_score stays native N/M.
+        # A malformed place count never becomes a competitive graded result.
+        valid = total > 0 and 0 <= placed <= total
         results.append({
             "game": "History in Order",
             "puzzle_id": f"#{pid}",
             "solved": solved,
-            "rank_score": float(placed) if solved else 99.0,
+            "rank_score": float(-placed) if valid else 10000.0,
             "display_score": f"{placed}/{total}",
             "extra_url": None
         })

@@ -53,7 +53,26 @@ def get_game_icon(game_name: str) -> str:
 # Games where every posted score competes for daily podium points, ranked by
 # closeness (no elimination). All other games stay elimination-style: only
 # solved runs score points. Stats/'win' semantics are per-parser and unchanged.
-GRADED_GAMES = {"Trivmount"}
+# History in Order partials compete, but only a full match is solved (a win/crown).
+GRADED_GAMES = {"Trivmount", "History in Order"}
+
+
+def is_ranked_result(game: str, solved: int, rank_score) -> bool:
+    """Whether a stored result competes for daily placement and podium points.
+
+    Solved results compete through the ordinary elimination path. Unsolved
+    results compete only in graded games. History in Order uses negative
+    placements for genuine numeric partials, so only rank_score <= 0 is
+    eligible; legacy DNF/forfeit sentinels and malformed scores stay out.
+    Nonnumeric rank keys never compete.
+    """
+    if not isinstance(rank_score, (int, float)) or isinstance(rank_score, bool):
+        return False
+    if solved:
+        return True
+    if game == "History in Order":
+        return rank_score <= 0
+    return game in GRADED_GAMES and rank_score < 10000
 
 # Playful public acknowledgements for exact integer results. Curated static links,
 # no external image API requested. URLs were validated to serve actual GIFs.

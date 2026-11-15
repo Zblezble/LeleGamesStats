@@ -245,6 +245,15 @@ RANK_CASES = [
     ("maptap zero is completed, not DNF",
      MAPTAP_ZERO_SHARE,
      [("Maptap", "December 3", 1, 0.0, "0 pts")]),
+    ("history full ranks by negative placements",
+     "History in Order №214 · 6/6",
+     [("History in Order", "#214", 1, -6.0, "6/6")]),
+    ("history partial ranks by negative placements",
+     "History in Order №214 · 4/6",
+     [("History in Order", "#214", 0, -4.0, "4/6")]),
+    ("history uses the native total, not a hardcoded one",
+     "History in Order №300 · 8/10",
+     [("History in Order", "#300", 0, -8.0, "8/10")]),
 ]
 
 

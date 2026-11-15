@@ -28,7 +28,7 @@ Ties share both the placement and the points. Other players’ scores are not pe
 
 For most games, only solved results compete. Unfinished/DNF players stay visible with their displayed score, but do not earn ranking points.
 
-The exception is **Trivmount**, a graded game: any nonzero score competes for points, even if it is not a perfect summit. A zero score earns nothing.
+The graded games are **Trivmount** and **History in Order**: every scored result competes for points, even if it is not a perfect run. A Trivmount zero earns nothing. For History in Order, a numeric partial (e.g. 4/6, or 0/6) can therefore reach the daily podium, but only a full match (placed == total) counts as solved, a win, or a crown.
 
 ---
 
@@ -54,7 +54,7 @@ In the table below, **lower rank_score wins**. Where a value contributes to the 
 | **Songspot** | `−(known songs / total songs × 100) − (points / max points × 0.001)` | Known songs determine the primary placement; points are a small tiebreak. Performance uses known/total. |
 | **Regionle** | `tries` | Simple fewer-tries wins over seven attempts. DNF is 99. |
 | **Mathle** | `tries` | Lower attempts wins. DNF is 99. |
-| **History in Order** | `placements` | Fewer placements wins. Complete means placed == total recognized events (e.g. 6/6); incomplete is 99. |
+| **History in Order** | `−placements` | More correctly placed events wins, so a 4/6 ranks above a 2/6. Any numeric partial competes through the graded exception, but only a full match (placed == total, e.g. 6/6) counts as solved/won. DNF and forfeits do not compete. |
 | **Tradle** | `tries` | Fewer tries wins. DNF is 99. |
 | **Chessle** | `attempts + 0.000001 × seconds` | Attempts dominate, elapsed time is a small tiebreak. The level (e.g. Medium) is preserved in the game name. |
 | **Maptap** | `-final score` | The published **final score** is the only authoritative result; higher is better. The preceding emoji-annotated values are not summed. A completed share with a final score of 0 is still a finished result, not a DNF. Excluded from cross-game difficulty because its score maximum and comparability are not established. |

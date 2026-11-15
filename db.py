@@ -1,10 +1,48 @@
 """SQLite schema and the ingest audit log."""
 import csv
 import io
+import re
 import sqlite3
 from datetime import datetime, timedelta
 
 import config
+
+
+def _migrate_history_ranks(c):
+    """Normalize existing native History in Order rows to -placements, idempotently.
+
+    Old full results were stored as solved=1 with rank_score=placements while
+    partials used rank 99; both must share the new negative-placements key so
+    old and new results compare consistently. Only exact-game rows with an exact
+    N/M display, positive total, 0 <= N <= M and a stored solved flag matching
+    N == M are rewritten to -N. DNF/forfeit, malformed or inconsistent values,
+    unknown modes and all other game tables are left untouched.
+    Returns the number of rows changed.
+    """
+    rows = c.execute(
+        "SELECT id, display_score, solved, rank_score FROM scores"
+        " WHERE game = ?",
+        ("History in Order",)
+    ).fetchall()
+    updates = []
+    for row_id, display_score, solved, rank_score in rows:
+        if not isinstance(rank_score, (int, float)) or isinstance(rank_score, bool):
+            continue
+        match = re.fullmatch(r"(\d+)/([1-9]\d*)", (display_score or "").strip())
+        if not match:
+            continue
+        placed, total = int(match.group(1)), int(match.group(2))
+        if placed > total:
+            continue
+        if solved != (1 if placed == total else 0):
+            continue
+        new_rank = float(-placed)
+        if rank_score == new_rank:
+            continue
+        updates.append((new_rank, row_id))
+    if updates:
+        c.executemany("UPDATE scores SET rank_score = ? WHERE id = ?", updates)
+    return len(updates)
 
 
 def init_db():
@@ -75,6 +113,11 @@ def init_db():
         if "ingest_id" not in cols:
             c.execute("ALTER TABLE scores ADD COLUMN ingest_id INTEGER")
             conn.commit()
+
+        # Normalize legacy native History results (full and partial) so rendered
+        # boards and recalculated standings use the corrected placement order.
+        _migrate_history_ranks(c)
+        conn.commit()
 
 
 def wrap_already_posted(board_date: str) -> bool:
@@ -206,7 +249,8 @@ def forfeit_entry(board_date: str, user_id: int, user_name: str, game_key: str):
             "SELECT 1 FROM scores WHERE board_date = ? AND game = ? AND puzzle_id = ? AND user_id = ?",
             (board_date, game, puzzle_id, user_id)
         ).fetchone() is not None
-        rank = 10000.0 if game_key == "Trivmount" else 999.0
+        # Graded games keep their DNF/forfeit sentinels above the competitive cutoff.
+        rank = 10000.0 if game_key in {"Trivmount", "History in Order"} else 999.0
         c.execute("""
             INSERT INTO scores (board_date, user_id, user_name, game, puzzle_id, solved, rank_score, display_score)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)

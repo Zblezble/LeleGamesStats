@@ -8,7 +8,7 @@ import discord
 
 import config
 import db
-from games import ACTIVE_GAME_META, DIFFICULTY_GAMES, GRADED_GAMES, game_available_on, get_game_icon
+from games import ACTIVE_GAME_META, DIFFICULTY_GAMES, game_available_on, get_game_icon, is_ranked_result
 
 
 def _entries_by_game(board_date: str):
@@ -35,12 +35,11 @@ def placement_of(board_date: str, game: str, puzzle_id: str, user_id: int) -> st
     entries = grouped.get((game, puzzle_id))
     if not entries:
         return None
-    graded = game in GRADED_GAMES
-    pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
+    pool = {e[3] for e in entries if is_ranked_result(game, e[2], e[3])}
     unique_scores = sorted(list(pool))
     for uid, _uname, solved, rscore, _d, _u in entries:
         if uid == user_id:
-            if solved or (graded and rscore < 10000):
+            if is_ranked_result(game, solved, rscore):
                 return f"{unique_scores.index(rscore) + 1}/{len(entries)}"
             return None
     return None
@@ -59,11 +58,10 @@ def compute_daily_points(board_date: str):
         names[uid] = uname
 
     for (game, _pid), entries in grouped.items():
-        graded = game in GRADED_GAMES
-        pool = {e[3] for e in entries if e[2] == 1 or (graded and e[3] < 10000)}
+        pool = {e[3] for e in entries if is_ranked_result(game, e[2], e[3])}
         unique_scores = sorted(list(pool))
         for uid, uname, solved, rscore, _d, _u in entries:
-            competes = solved or (graded and rscore < 10000)
+            competes = is_ranked_result(game, solved, rscore)
             if competes:
                 names[uid] = uname
                 rank_idx = unique_scores.index(rscore)
