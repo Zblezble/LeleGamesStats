@@ -93,7 +93,11 @@ def test_ordinary_standings_preserve_order_and_unfiltered_comment():
         assert calls == [(day, expected_names, expected_standings)], calls
         assert embed.title == "🏆 Yesterday's wrap · Mon 3 Mar"
         assert field(embed, "Final standings") == (
-            "Alice `3` · Dan `3` · Bob `2` · Erin `2` · Cara `1`"
+            "Alice `3` pts · 1 game · 3.0 pts/game\n"
+            "Dan `3` pts · 1 game · 3.0 pts/game\n"
+            "Bob `2` pts · 1 game · 2.0 pts/game\n"
+            "Erin `2` pts · 1 game · 2.0 pts/game\n"
+            "Cara `1` pts · 1 game · 1.0 pts/game"
         )
         assert not {"Daily reels", "Full names", "Bonus reel"}.intersection(
             item.name for item in embed.fields
@@ -107,6 +111,26 @@ def test_ordinary_standings_preserve_order_and_unfiltered_comment():
     finally:
         embeds._wrap_comment = original_comment
         cleanup(old_path, old_prison, path)
+
+
+def test_standings_lines_count_distinct_results_and_handle_zero_games():
+    pan = (1, "Pan Security Evangelist", 1, 1.0, "3/6", None)
+    grouped = {}
+    for index in range(15):
+        # Distinct native puzzles count separately; a repeated row in one group does not.
+        grouped[("Redactle", f"#{index + 1}")] = [pan, pan] if index == 0 else [pan]
+    grouped[("Wordle", "#dnf")] = [(2, "Attempted", 0, 999.0, "DNF", None)]
+
+    lines = embeds._wrap_standings_lines(
+        [(1, 42), (2, 3), (3, 0.0)],
+        {1: "Pan Security Evangelist", 2: "Attempted", 3: "Missing"},
+        grouped,
+    )
+    assert lines == [
+        "Pan Security Evangelist `42` pts · 15 games · 2.8 pts/game",
+        "Attempted `3` pts · 1 game · 3.0 pts/game",
+        "Missing `0.0` pts · 0 games · 0.0 pts/game",
+    ]
 
 
 def test_tied_totals_keep_existing_order_and_points():
@@ -126,7 +150,11 @@ def test_tied_totals_keep_existing_order_and_points():
         assert points == {1: 5, 2: 5, 3: 2}, points
         tied = embeds.build_wrap_embed(tied_day)
         assert tied is not None
-        assert field(tied, "Final standings") == "Alice `5` · Bob `5` · Cara `2`"
+        assert field(tied, "Final standings") == (
+            "Alice `5` pts · 2 games · 2.5 pts/game\n"
+            "Bob `5` pts · 2 games · 2.5 pts/game\n"
+            "Cara `2` pts · 2 games · 1.0 pts/game"
+        )
 
         # Both games together give every player exactly three points.
         names = {1: "Alice", 2: "Bob", 3: "Cara", 4: "Dan"}
@@ -141,7 +169,34 @@ def test_tied_totals_keep_existing_order_and_points():
         identical = embeds.build_wrap_embed(identical_day)
         assert identical is not None
         assert field(identical, "Final standings") == (
-            "Alice `3` · Bob `3` · Cara `3` · Dan `3`"
+            "Alice `3` pts · 2 games · 1.5 pts/game\n"
+            "Bob `3` pts · 2 games · 1.5 pts/game\n"
+            "Cara `3` pts · 2 games · 1.5 pts/game\n"
+            "Dan `3` pts · 2 games · 1.5 pts/game"
+        )
+    finally:
+        cleanup(old_path, old_prison, path)
+
+
+def test_standings_order_stays_by_total_points_not_average():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-03-11"
+    try:
+        add_score(day, 2, "Bob", "#31", 1)
+        add_score(day, 1, "Alice", "#31", 2)
+        add_score(day, 3, "Cara", "#31", 3)
+        add_score(day, 3, "Cara", "#32", 1)
+        add_score(day, 1, "Alice", "#32", 2)
+
+        points, _names = embeds.compute_daily_points(day)
+        assert points == {2: 3, 1: 4, 3: 4}, points
+        embed = embeds.build_wrap_embed(day)
+        assert embed is not None
+        # Bob has the best average, but remains below both four-point players.
+        assert field(embed, "Final standings") == (
+            "Alice `4` pts · 2 games · 2.0 pts/game\n"
+            "Cara `4` pts · 2 games · 2.0 pts/game\n"
+            "Bob `3` pts · 1 game · 3.0 pts/game"
         )
     finally:
         cleanup(old_path, old_prison, path)
@@ -159,9 +214,11 @@ def test_final_standings_keep_full_names_without_reel_fallbacks():
         embed = embeds.build_wrap_embed(day)
         assert embed is not None
         standings = field(embed, "Final standings")
-        assert f"{long_name} `3`" in standings
-        assert f"{tick_name} `2`" in standings
-        assert "Cara `1`" in standings
+        safe_long = discord.utils.escape_markdown(long_name)
+        safe_tick = discord.utils.escape_markdown(tick_name)
+        assert f"{safe_long} `3` pts · 1 game · 3.0 pts/game" in standings
+        assert f"{safe_tick} `2` pts · 1 game · 2.0 pts/game" in standings
+        assert "Cara `1` pts · 1 game · 1.0 pts/game" in standings
         assert "Full names" not in {item.name for item in embed.fields}
         assert embed.fields[-1].name == "\u200b"
     finally:
@@ -206,7 +263,25 @@ def test_all_zero_board_has_no_standings_or_roast():
         cleanup(old_path, old_prison, path)
 
 
-def test_difficulty_comments_include_selected_daily_and_weekly_medians():
+def test_zero_point_player_in_a_real_contest_shows_zero_average():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-03-12"
+    config.PRISON_ENABLED = True
+    try:
+        add_score(day, 1, "Alice", "#51", 1)
+        add_score(day, 2, "Bob", "#51", 2)
+        db.add_prisoner(day, 1, "Alice", "Wordle")
+        embed = embeds.build_wrap_embed(day)
+        assert embed is not None
+        assert field(embed, "Final standings") == (
+            "Bob `2` pts · 1 game · 2.0 pts/game\n"
+            "Alice `0.0` pts · 1 game · 0.0 pts/game"
+        )
+    finally:
+        cleanup(old_path, old_prison, path)
+
+
+def test_difficulty_fields_show_native_daily_and_weekly_medians():
     old_path, old_prison, path = fresh_db()
     old_today = config.today_str
     day = "2025-03-10"
@@ -221,16 +296,62 @@ def test_difficulty_comments_include_selected_daily_and_weekly_medians():
         daily = embeds.build_wrap_embed(day)
         weekly = embeds.build_weekly_embed(days=7)
         assert daily is not None and weekly is not None
+        expected = (
+            "Easiest: **Wordle** · median `1.5/6 guesses` · normalized `91.7%`\n"
+            "Hardest: **Wordle** · median `5.5/6 guesses` · normalized `25.0%`"
+        )
         for verdict in (field(daily, "Game difficulty"), field(weekly, "Game difficulty")):
-            lines = verdict.splitlines()
-            assert len(lines) == 4, lines
-            assert lines[0].startswith("Easiest: **Wordle**"), lines
-            assert lines[1] == "Median score: 91.7%", lines
-            assert lines[2].startswith("Hardest: **Wordle**"), lines
-            assert lines[3] == "Median score: 25.0%", lines
+            assert verdict == expected, verdict
+            assert len(verdict) <= 1024
+            for removed in (
+                "free points", "figured this one out", "confidence booster", "warm welcome",
+                "silence after the answers", "tiny derailment", "strengthen their stance", "lunch money",
+            ):
+                assert removed not in verdict
     finally:
         config.today_str = old_today
         cleanup(old_path, old_prison, path)
+
+
+def test_native_difficulty_formats_score_ratios_placements_and_regionle():
+    def result(rank_score, display_score, solved=1):
+        return (1, "Player", solved, rank_score, display_score, None)
+
+    wordle = [result(1, "1/6"), result(1, "1/6")]
+    assert embeds._native_median("Wordle", wordle, 1.0) == "1/6 guesses"
+    assert embeds._performance_fraction("Wordle", 1, 1, "1/6") > embeds._performance_fraction(
+        "Wordle", 1, 5, "5/6"
+    )  # Fewer guesses is better.
+
+    centumth = [result(-250, "250/490"), result(-250, "250/490")]
+    centumth_score = embeds._median([
+        embeds._performance_fraction("Centumth", 1, rank, display)
+        for _uid, _name, _solved, rank, display, _url in centumth
+    ])
+    assert embeds._performance_fraction("Centumth", 1, -250, "250/490") > embeds._performance_fraction(
+        "Centumth", 1, -100, "100/490"
+    )  # More correct answers is better, completely unlike guess-count ordering.
+    assert embeds._difficulty_summary(
+        "2025-03-14", "hardest", [("Centumth", centumth_score, centumth)]
+    ) == "Hardest: **Centumth** · median `250/490` · normalized `51.0%`"
+
+    history = [result(-4, "4/6", 0), result(-2, "2/6", 0)]
+    assert embeds._native_median("History in Order", history, 0.5) == "3/6 placements"
+
+    regionle = [result(3, "3/7"), result(5, "5/7")]
+    assert embeds._native_median("Regionle (US States)", regionle, 4 / 7) == "4/7 guesses"
+    assert embeds._difficulty_summary(
+        "2025-03-14", "easiest", [("Regionle (US States)", 4 / 7, regionle)]
+    ) == "Easiest: **Regionle (US States)** · median `4/7 guesses` · normalized `57.1%`"
+
+    maptap = [result(-1234, "1234"), result(-1234, "1234")]
+    assert embeds._native_median("Maptap", maptap, 0.75) is None
+    assert embeds._difficulty_summary(
+        "2025-03-14", "hardest", [("Maptap", 0.75, maptap)]
+    ) == "Hardest: **Maptap** · normalized `75.0%`"
+    assert embeds._native_median(
+        "Wordle", [result(1, "1/6"), result(1, "1/8")], 1.0
+    ) is None  # Mixed puzzle contexts are not safe to combine into a native fraction.
 
 
 def test_regionle_named_modes_use_the_regionle_scale():
@@ -242,12 +363,57 @@ def test_regionle_named_modes_use_the_regionle_scale():
     assert named_mode != (7 - 4) / 6  # Not the generic six-try fallback.
 
 
+def test_long_standings_partition_complete_player_lines():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-03-13"
+    players = []
+    try:
+        for pair in range(12):
+            for offset, (points, rank_score) in enumerate(((3, 1), (2, 2))):
+                uid = pair * 2 + offset + 1
+                name = f"Player {uid:02d} with a deliberately long display name for wrap fields"
+                players.append((name, points))
+                add_score(day, uid, name, f"#70-{pair}", rank_score)
+
+        embed = embeds.build_wrap_embed(day)
+        assert embed is not None
+        standing_fields = [
+            item for item in embed.fields
+            if item.name == "Final standings" or (item.name or "").startswith("Final standings (")
+        ]
+        assert len(standing_fields) > 1
+        assert [item.name for item in standing_fields] == [
+            f"Final standings ({index}/{len(standing_fields)})"
+            for index in range(1, len(standing_fields) + 1)
+        ]
+        assert all(len(item.value or "") <= 1024 for item in standing_fields)
+        assert len(embed) <= 6000
+
+        actual_lines = [
+            line for item in standing_fields for line in (item.value or "").splitlines()
+        ]
+        expected_lines = [
+            f"{name} `{points}` pts · 1 game · {points:.1f} pts/game"
+            for name, points in sorted(players, key=lambda player: (-player[1], player[0]))
+        ]
+        assert actual_lines == expected_lines
+        assert len(actual_lines) == len(set(actual_lines)) == 24
+        assert embed.fields[-1].name == "\u200b"
+    finally:
+        cleanup(old_path, old_prison, path)
+
+
 if __name__ == "__main__":
     test_ordinary_standings_preserve_order_and_unfiltered_comment()
+    test_standings_lines_count_distinct_results_and_handle_zero_games()
     test_tied_totals_keep_existing_order_and_points()
+    test_standings_order_stays_by_total_points_not_average()
     test_final_standings_keep_full_names_without_reel_fallbacks()
     test_solo_and_multiplayer_no_point_days_are_quiet()
     test_all_zero_board_has_no_standings_or_roast()
-    test_difficulty_comments_include_selected_daily_and_weekly_medians()
+    test_zero_point_player_in_a_real_contest_shows_zero_average()
+    test_difficulty_fields_show_native_daily_and_weekly_medians()
+    test_native_difficulty_formats_score_ratios_placements_and_regionle()
     test_regionle_named_modes_use_the_regionle_scale()
+    test_long_standings_partition_complete_player_lines()
     print("All wrap tests passed.")

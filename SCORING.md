@@ -24,6 +24,8 @@ For a result to earn **daily points** it must be in a **competitive game**, mean
 
 Ties share both the placement and the points. Other players’ scores are not penalized. Daily points are aggregated into a standings footer named **“Today's points”**.
 
+Yesterday's wrap also shows each standings player's played puzzle results and **points per game**: total daily points ÷ distinct `(game, puzzle_id)` records. Failed, DNF, and forfeit attempts count as played; this informational average never changes points or standings order.
+
 ### Elimination vs. graded results
 
 For most games, only solved results compete. Unfinished/DNF players stay visible with their displayed score, but do not earn ranking points.
@@ -67,7 +69,9 @@ The wrap uses the distribution of everyone’s results, not the stand-out indivi
 
 1. Converts each result into a comparable **performance fraction** from 0 to 1.
 2. Uses the **median** fraction per game, so a single lucky or unlucky player does not define difficulty.
-3. Picks the highest median score as **easiest** and the lowest as **hardest**, then renders a playful description.
+3. Picks the highest median score as **easiest** and the lowest as **hardest**, then reports that normalized median without playful commentary.
+
+When the selected puzzle rows provide a clear native denominator, the wrap also shows the median in familiar units: inverted guess counts for Wordle-style games and Regionle, native correct/total ratios for score-ratio games, and placements for History in Order. This is the same selected median expressed in native units, not another score; if that context is ambiguous, only the normalized percentage is shown.
 
 ### Normalization used by games
 

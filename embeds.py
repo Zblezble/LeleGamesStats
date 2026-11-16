@@ -176,6 +176,13 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     return embed
 
 
+def _is_score_ratio_game(game: str) -> bool:
+    """Games whose display numerator/denominator is directly comparable."""
+    return game in {
+        "Trivmount", "Thursday Thirty", "Songless", "Centumth", "Majority", "Songspot", "History in Order"
+    } or game.startswith("Magnitudle")
+
+
 def _performance_fraction(game: str, solved: int, rank_score: float, display_score: str) -> float:
     """Map one result to a roughly comparable 0..1 outcome strength, for daily difficulty.
 
@@ -186,7 +193,7 @@ def _performance_fraction(game: str, solved: int, rank_score: float, display_sco
     """
     dscore = (display_score or "").strip()
     # Only genuine scoring games treat x/y as a score ratio. Wordle's 1/6 is a first try.
-    if game in {"Trivmount", "Thursday Thirty", "Songless", "Centumth", "Majority", "Songspot", "History in Order"} or game.startswith("Magnitudle"):
+    if _is_score_ratio_game(game):
         ratio = re.match(r"(\d+)/([1-9]\d*)", dscore)
         if ratio:
             correct, total = int(ratio.group(1)), int(ratio.group(2))
@@ -227,25 +234,57 @@ def _prison_group(start_date: str, end_date: str):
     return label, "\n".join(lines)
 
 
-def _difficulty_comment(board_date: str, level: str, candidates: list[str], score: float) -> str:
-    """A playful difficulty verdict with the normalized median that selected it."""
-    name = random.Random(f"{board_date}:{level}:game").choice(candidates)
-    lines = {
-        "easiest": (
-            f"Easiest: **{name}**, also known as free points.",
-            f"Easiest: **{name}**, the group has figured this one out.",
-            f"Easiest: **{name}**, today's official confidence booster.",
-            f"Easiest: **{name}** was a warm welcome, in puzzle form.",
-        ),
-        "hardest": (
-            f"Hardest: **{name}**. The silence after the answers was notable.",
-            f"Hardest: **{name}**, today's tiny derailment.",
-            f"Hardest: **{name}** made a few people quietly strengthen their stance in life.",
-            f"Hardest: **{name}** took lunch money and half the afternoon.",
-        ),
-    }
-    comment = random.Random(f"{board_date}:{level}:line").choice(lines[level])
-    return f"{comment}\nMedian score: {score:.1%}"
+def _format_native_number(value: float) -> str:
+    """Keep native medians compact, allowing fractional values without trailing .0."""
+    rounded = round(value, 1)
+    return str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
+
+
+def _native_denominator(entries: list[tuple], score_ratio: bool) -> int | None:
+    """Infer a shared native denominator only from available rows in this puzzle group."""
+    pattern = r"(\d+)/([1-9]\d*)" if score_ratio else r"(?:\d+|X)/([1-9]\d*)"
+    group = 2 if score_ratio else 1
+    denominators = set()
+    for entry in entries:
+        match = re.match(pattern, (entry[4] or "").strip(), re.IGNORECASE)
+        if match:
+            denominators.add(int(match.group(group)))
+    return denominators.pop() if len(denominators) == 1 else None
+
+
+def _native_median(game: str, entries: list[tuple], score: float) -> str | None:
+    """Invert the selected normalized median into familiar units when that is unambiguous."""
+    if _is_score_ratio_game(game):
+        denominator = _native_denominator(entries, score_ratio=True)
+        if denominator is None:
+            return None
+        unit = " placements" if game == "History in Order" else ""
+        return f"{_format_native_number(score * denominator)}/{denominator}{unit}"
+
+    if game.startswith("Regionle"):
+        denominator = _native_denominator(entries, score_ratio=False)
+        guesses = 1 + (1 - score) * 7
+    elif game.split(" (", 1)[0] in {"Wordle", "Worldle", "Flagle", "Mathle", "Tradle", "Chessle"}:
+        denominator = _native_denominator(entries, score_ratio=False)
+        guesses = 7 - 6 * score
+    else:
+        # Excluded/open-ended games (including Maptap) have no guessed native maximum.
+        return None
+
+    if denominator is None:
+        return None
+    return f"{_format_native_number(guesses)}/{denominator} guesses"
+
+
+def _difficulty_summary(board_date: str, level: str, candidates: list[tuple]) -> str:
+    """Select a tied extremum as before, then report its factual native and normalized medians."""
+    game, score, entries = random.Random(f"{board_date}:{level}:game").choice(candidates)
+    label = "Easiest" if level == "easiest" else "Hardest"
+    summary = f"{label}: **{game}**"
+    native = _native_median(game, entries, score)
+    if native is not None:
+        summary += f" · median `{native}`"
+    return summary + f" · normalized `{score:.1%}`"
 
 
 def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[int, int]]) -> str:
@@ -311,6 +350,28 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
     return random.Random(f"{board_date}:line").choice(lines[kind])
 
 
+def _wrap_standings_lines(standings: list[tuple[int, int | float]], names: dict[int, str], grouped) -> list[str]:
+    """Format each standing with played puzzle results and informational points per game."""
+    played_counts = {uid: 0 for uid, _points in standings}
+    for entries in grouped.values():
+        # One group is one native puzzle result, even if inconsistent data repeats a user.
+        for uid in {entry[0] for entry in entries}:
+            if uid in played_counts:
+                played_counts[uid] += 1
+
+    lines = []
+    for uid, points in standings:
+        played = played_counts[uid]
+        average = points / played if played else 0.0
+        game_noun = "game" if played == 1 else "games"
+        display_name = re.sub(r"\s+", " ", names.get(uid, "Someone")).strip() or "Someone"
+        safe_name = discord.utils.escape_mentions(discord.utils.escape_markdown(display_name))
+        lines.append(
+            f"{safe_name} `{points}` pts · {played} {game_noun} · {average:.1f} pts/game"
+        )
+    return lines
+
+
 def build_wrap_embed(board_date: str) -> discord.Embed | None:
     """Locked-day wrap: turnout, game difficulty, final standings and one placement comment."""
     grouped = _entries_by_game(board_date)
@@ -343,28 +404,30 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
             _performance_fraction(game, solved, rscore, dscore)
             for _uid, _uname, solved, rscore, dscore, _url in entries
         )
-        rates.append((game, _median(outcomes), len(entries)))
-    hits = [(name, pct, n) for name, pct, n in rates if pct > 0]
+        rates.append((game, _median(outcomes), entries))
+    hits = [entry for entry in rates if entry[1] > 0]
     if hits:
         highest, lowest = max(r[1] for r in hits), min(r[1] for r in hits)
         if highest != lowest:
-            easiest_games = [r[0] for r in hits if r[1] == highest]
-            hardest_games = [r[0] for r in hits if r[1] == lowest]
+            easiest_games = [r for r in hits if r[1] == highest]
+            hardest_games = [r for r in hits if r[1] == lowest]
             embed.add_field(
                 name="Game difficulty",
-                value=f"{_difficulty_comment(board_date, 'easiest', easiest_games, highest)}\n"
-                      f"{_difficulty_comment(board_date, 'hardest', hardest_games, lowest)}",
+                value=f"{_difficulty_summary(board_date, 'easiest', easiest_games)}\n"
+                      f"{_difficulty_summary(board_date, 'hardest', hardest_games)}",
                 inline=False,
             )
 
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
     has_points_contest = len(players) > 1 and any(points > 0 for _uid, points in standings)
     if has_points_contest:
-        standings_str = " · ".join([f"{names[u]} `{p}`" for u, p in standings])
-        embed.add_field(name="Final standings", value=standings_str, inline=False)
+        standings_fields = _checklist_fields(
+            "Final standings", _wrap_standings_lines(standings, names, grouped)
+        )
 
         # Keep the existing date-seeded target and line variety as the sole punchline.
-        embed.add_field(name="\u200b", value=_wrap_comment(board_date, names, standings), inline=False)
+        candidates = [*standings_fields, ("\u200b", _wrap_comment(board_date, names, standings), False)]
+        _append_daily_fields(embed, candidates)
     else:
         solo_players = sorted({uname for entries in grouped.values()
                                for _uid, uname, _s, _r, _d, _u in entries})
@@ -438,7 +501,7 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
             continue
         results = sorted(_performance_fraction(game, solved, rscore, dscore)
                          for _uid, _uname, solved, rscore, dscore, _url in entries)
-        rates.append((game, _median(results)))
+        rates.append((game, _median(results), entries))
     meaningful = [entry for entry in rates if entry[1] > 0]
     if meaningful:
         high = max(r[1] for r in meaningful)
@@ -446,9 +509,9 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
         if high != low:
             embed.add_field(
                 name="Game difficulty",
-                value=_difficulty_comment(end_text, "easiest", [r[0] for r in meaningful if r[1] == high], high)
+                value=_difficulty_summary(end_text, "easiest", [r for r in meaningful if r[1] == high])
                       + "\n"
-                      + _difficulty_comment(end_text, "hardest", [r[0] for r in meaningful if r[1] == low], low),
+                      + _difficulty_summary(end_text, "hardest", [r for r in meaningful if r[1] == low]),
                 inline=False,
             )
 
