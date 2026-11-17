@@ -26,7 +26,9 @@ def _meme_numbers(parsed_games: list[dict]) -> list[int]:
     """
     hits = set()
     for result in parsed_games:
-        score = result.get("rank_score", 0.0)
+        # Prefer the coarse base key: Roughly's secondary percentile tiebreak
+        # makes an otherwise integral grid estimate fractional.
+        score = result.get("base_rank_score", result.get("rank_score", 0.0))
         if isinstance(score, (int, float)) and score.is_integer():
             special = abs(int(score))
             if special in games.MEME_SCORES:

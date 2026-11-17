@@ -201,6 +201,7 @@ def parse_all_games(text: str) -> list[dict]:
         # No-grid shares carry a percentage, not a ratio.
         # Bucketed grid shares already carry a 0..1 estimate.
         # Normalize both to the same scale before comparing them.
+        best_pct = pct
         score = pct / 100.0
         display = f"Top {100 - pct}% ({pct}%)"
 
@@ -210,15 +211,25 @@ def parse_all_games(text: str) -> list[dict]:
         segment = tail[:next_header.start() if next_header else len(tail)]
         link = re.search(r"https://roughly\.is/d/[a-zA-Z0-9]+", segment)
         duel_url = link.group(0) if link else None
-        if grid_match := re.search(r"(?:^|\n)\s*([□▧▣■]{2,})\s*(?:\n|$)", segment):
+        has_grid = bool(grid_match := re.search(r"(?:^|\n)\s*([□▧▣■]{2,})\s*(?:\n|$)", segment))
+        if has_grid:
             tiers = [ROUGHLY_TIER_SCORES[s] for s in grid_match.group(1)]
             score = sum(tiers) / len(tiers)
-            display = f"~{score:.0%} ({len(tiers)} rounds)"
+            display = f"~{score:.0%} · best {best_pct}%"
+        # The grid midpoint average is the primary quality. The exact best-round
+        # percentile only breaks ties between shares with the same grid average,
+        # so it is weighted far below one grid point.
+        rank_score = -score * 100
+        if has_grid:
+            rank_score -= best_pct / 10000.0
         results.append({
             "game": f"Roughly ({submode})",
             "puzzle_id": f"#{pid}",
             "solved": 1,
-            "rank_score": -score * 100,
+            "rank_score": rank_score,
+            # Coarse pre-tiebreak key so integral grid estimates still trigger
+            # curated gif scores. Never persisted; callers store rank_score.
+            "base_rank_score": -score * 100,
             "display_score": display,
             "extra_url": duel_url
         })

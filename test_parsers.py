@@ -27,6 +27,35 @@ MAPTAP_ZERO_SHARE = (
     "Final score: 0"
 )
 
+# The user-supplied share that motivated the grid-first / best-round tiebreak.
+# Grid mean = (0.725 x 3 + 0.15 + 0.925) / 5 = 0.65, native best round = 95%.
+ROUGHLY_FULL_SHARE = (
+    "roughly · Where? #321\n"
+    "Where is the pygmy hippo located?\n"
+    "Me: better than 95% of players\n"
+    "▣▣▣□■\n\n"
+    "Can you beat me?\n"
+    "https://roughly.is/d/er6zn2erwp"
+)
+# Same grid (same 65% midpoint mean), deliberately weaker best round.
+ROUGHLY_SAME_GRID_LOW_BEST = ROUGHLY_FULL_SHARE.replace("95%", "60%")
+ROUGHLY_LEGACY_SHARE = (
+    "roughly · Where from? #306\nCan you guess the country?\n"
+    "Me: better than 97% of players\nhttps://roughly.is/d/abC123"
+)
+ROUGHLY_ALL_ROUND_GRID = (
+    "roughly · How big? #77\nHow wide is a giant Pacific octopus, arm tip to arm tip?\n"
+    "Me: better than 99% of players\n▧■▣■■\n\nCan you beat me?\n"
+    "https://roughly.is/d/cqsdamg898"
+)
+ROUGHLY_MULTI_SHARE = (
+    "roughly · Where from? #306\nWhich country?\n"
+    "Me: better than 97% of players\n"
+    "roughly · Where from? #307\nWhich country?\n"
+    "Me: better than 24% of players\n■■\n"
+    "https://roughly.is/d/second123"
+)
+
 # (case name, paste text, expected results as (game, puzzle_id, solved, display_score))
 CASES = [
     # --- Metazooa ---
@@ -182,7 +211,7 @@ CASES = [
 
     ("roughly all-round symbol grid, not just best",
      "roughly · How big? #77\nHow wide is a giant Pacific octopus, arm tip to arm tip?\nMe: better than 99% of players\n▧■▣■■\n\nCan you beat me?\nhttps://roughly.is/d/cqsdamg898",
-     [("Roughly (How big)", "#77", 1, "~79% (5 rounds)")]),
+     [("Roughly (How big)", "#77", 1, "~79% · best 99%")]),
 
     # --- Mathle ---
     ("mathle",
@@ -231,7 +260,7 @@ CASES = [
     ("roughly multiple results with independent paths",
      "roughly · Where from? #306\nWhich country?\nMe: better than 97% of players\nroughly · Where from? #307\nWhich country?\nMe: better than 24% of players\n■■\nhttps://roughly.is/d/second123",
      [("Roughly (Where from)", "#306", 1, "Top 3% (97%)"),
-      ("Roughly (Where from)", "#307", 1, "~92% (2 rounds)")]),
+      ("Roughly (Where from)", "#307", 1, "~92% · best 24%")]),
 
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
@@ -265,6 +294,73 @@ RANK_CASES = [
 ]
 
 
+def roughly_grid_tiebreak_checks() -> tuple[int, list[str]]:
+    """Verify the midpoint average stays primary and the native best only breaks ties."""
+    failures: list[str] = []
+    checks = 0
+
+    def check(name, actual, expected):
+        nonlocal checks
+        checks += 1
+        if actual != expected:
+            failures.append(f"{name}\n  expected: {expected!r}\n  got:      {actual!r}")
+
+    def check_close(name, actual, expected, tolerance=1e-9):
+        nonlocal checks
+        checks += 1
+        if not isinstance(actual, (int, float)) or abs(actual - expected) > tolerance:
+            failures.append(f"{name}\n  expected: {expected!r} (+-{tolerance})\n  got:      {actual!r}")
+
+    # Full user example: grid midpoint ~65% is primary, best 95% is the tiny tiebreak.
+    full = parse_all_games(ROUGHLY_FULL_SHARE)
+    check("full share count", len(full), 1)
+    result = full[0]
+    check("full game/mode", result["game"], "Roughly (Where)")
+    check("full puzzle id", result["puzzle_id"], "#321")
+    check("full solved", result["solved"], 1)
+    check_close("full base rank keeps midpoint average", result["base_rank_score"], -65.0)
+    check_close("full rank adds best/10000 tiebreak", result["rank_score"], -65.0095)
+    check("full display keeps coarse midpoint estimate", result["display_score"],
+          "~65% · best 95%")
+    check("full duel url", result["extra_url"], "https://roughly.is/d/er6zn2erwp")
+
+    # Same grid mean, different native best: primary tie, higher exact percentile wins.
+    low = parse_all_games(ROUGHLY_SAME_GRID_LOW_BEST)[0]
+    check("same-grid low display", low["display_score"], "~65% · best 60%")
+    check_close("same-grid midpoint tie", low["base_rank_score"], result["base_rank_score"], 0.0)
+    check("same-grid higher best strictly outranks", low["rank_score"] > result["rank_score"], True)
+    check_close("same-grid rank gap is only the percentile delta",
+                result["rank_score"] - low["rank_score"], -(95 - 60) / 10000.0)
+
+    # Legacy no-grid share: ordinary percentile ranking, no second tiebreak.
+    legacy = parse_all_games(ROUGHLY_LEGACY_SHARE)[0]
+    check("legacy game/mode", legacy["game"], "Roughly (Where from)")
+    check("legacy rank", legacy["rank_score"], -97.0)
+    check("legacy base rank", legacy["base_rank_score"], -97.0)
+    check("legacy display", legacy["display_score"], "Top 3% (97%)")
+    check("legacy duel url", legacy["extra_url"], "https://roughly.is/d/abC123")
+
+    # Existing all-round grid fixture keeps its midpoint value and gains the best label.
+    all_round = parse_all_games(ROUGHLY_ALL_ROUND_GRID)[0]
+    check_close("all-round grid base rank", all_round["base_rank_score"], -79.0)
+    check_close("all-round grid rank", all_round["rank_score"], -79.0099)
+    check("all-round grid display", all_round["display_score"], "~79% · best 99%")
+    check("all-round grid duel url", all_round["extra_url"], "https://roughly.is/d/cqsdamg898")
+
+    # Multi-share scoping: each tail keeps its own mode, grid, and duel link.
+    multi = parse_all_games(ROUGHLY_MULTI_SHARE)
+    check("multi-share count", len(multi), 2)
+    check("multi-share urls", [m["extra_url"] for m in multi],
+          [None, "https://roughly.is/d/second123"])
+    check("multi-share displays", [m["display_score"] for m in multi],
+          ["Top 3% (97%)", "~92% · best 24%"])
+    check_close("multi-share no-grid rank", multi[0]["rank_score"], -97.0)
+    check_close("multi-share grid base rank", multi[1]["base_rank_score"], -92.5)
+    check_close("multi-share grid rank", multi[1]["rank_score"], -92.5024)
+
+    return checks, failures
+
+
 def main() -> int:
     failures = 0
     for name, text, expected in CASES:
@@ -292,6 +388,13 @@ def main() -> int:
             printable = [f"{g} rank={r} {d}" for g, _, _, r, d in expected] or ["(no match)"]
             print(f"ok   {name}: {', '.join(printable)}")
     total = len(CASES) + len(RANK_CASES)
+    extra_total, extra_failures = roughly_grid_tiebreak_checks()
+    total += extra_total
+    failures += len(extra_failures)
+    for failure in extra_failures:
+        print(f"FAIL {failure}")
+    if not extra_failures:
+        print(f"ok   roughly grid midpoint primary / best-round tiebreak ({extra_total} checks)")
     print(f"\n{total - failures}/{total} cases passed")
     return 1 if failures else 0
 

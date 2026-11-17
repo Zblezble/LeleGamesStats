@@ -11,6 +11,7 @@ os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import games
 import handlers
+import parsers
 
 GIF_PAYLOAD = b"GIF89a" + bytes(range(64))
 
@@ -129,9 +130,30 @@ def test_cached_bytes_use_a_fresh_stream_on_each_send():
     assert [s["filename"] for s in channel.sent] == ["meme-69.gif", "meme-69.gif"]
 
 
+def test_roughly_finer_rank_still_triggers_integral_base_score():
+    # Grid mean = 69%, native best = 37%: rank_score becomes -69.0037, but the
+    # coarse base key stays integral so the curated 69 gif still triggers.
+    share = (
+        "roughly · Where? #322\n"
+        "Where would you find a quokka?\n"
+        "Me: better than 37% of players\n"
+        "▣▣□■■\n"
+        "https://roughly.is/d/grid69"
+    )
+    result = parsers.parse_all_games(share)[0]
+    assert result["base_rank_score"] == -69.0
+    assert not result["rank_score"].is_integer()
+    assert handlers._meme_numbers([result]) == [69]
+    # Without the base key the finer rank alone would miss the curated score.
+    assert handlers._meme_numbers([{"rank_score": result["rank_score"]}]) == []
+    # Non-Roughly integral scores keep their existing trigger behavior.
+    assert handlers._meme_numbers([{"rank_score": -69.0}]) == [69]
+
+
 if __name__ == "__main__":
     test_download_validates_content_and_bounds_read()
     test_post_sends_gif_attachment_with_original_caption()
     test_fallback_to_direct_link_on_download_or_validation_failure()
     test_cached_bytes_use_a_fresh_stream_on_each_send()
+    test_roughly_finer_rank_still_triggers_integral_base_score()
     print("All meme gif tests passed.")
