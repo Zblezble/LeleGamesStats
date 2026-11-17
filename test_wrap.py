@@ -5,6 +5,7 @@ Run: python -X utf8 test_wrap.py   (exits 1 on failure)
 All database cases use explicit rows in a temporary schema-aware SQLite file.
 """
 import os
+import random
 import sqlite3
 import sys
 import tempfile
@@ -93,11 +94,11 @@ def test_ordinary_standings_preserve_order_and_unfiltered_comment():
         assert calls == [(day, expected_names, expected_standings)], calls
         assert embed.title == "🏆 Yesterday's wrap · Mon 3 Mar"
         assert field(embed, "Final standings") == (
-            "Alice `3` pts · 1 game · 3.0 pts/game\n"
-            "Dan `3` pts · 1 game · 3.0 pts/game\n"
-            "Bob `2` pts · 1 game · 2.0 pts/game\n"
-            "Erin `2` pts · 1 game · 2.0 pts/game\n"
-            "Cara `1` pts · 1 game · 1.0 pts/game"
+            "Alice `3` pts · `1` game · `3.0` pts/game\n"
+            "Dan `3` pts · `1` game · `3.0` pts/game\n"
+            "Bob `2` pts · `1` game · `2.0` pts/game\n"
+            "Erin `2` pts · `1` game · `2.0` pts/game\n"
+            "Cara `1` pts · `1` game · `1.0` pts/game"
         )
         assert not {"Daily reels", "Full names", "Bonus reel"}.intersection(
             item.name for item in embed.fields
@@ -127,9 +128,9 @@ def test_standings_lines_count_distinct_results_and_handle_zero_games():
         grouped,
     )
     assert lines == [
-        "Pan Security Evangelist `42` pts · 15 games · 2.8 pts/game",
-        "Attempted `3` pts · 1 game · 3.0 pts/game",
-        "Missing `0.0` pts · 0 games · 0.0 pts/game",
+        "Pan Security Evangelist `42` pts · `15` games · `2.8` pts/game",
+        "Attempted `3` pts · `1` game · `3.0` pts/game",
+        "Missing `0.0` pts · `0` games · `0.0` pts/game",
     ]
 
 
@@ -151,9 +152,9 @@ def test_tied_totals_keep_existing_order_and_points():
         tied = embeds.build_wrap_embed(tied_day)
         assert tied is not None
         assert field(tied, "Final standings") == (
-            "Alice `5` pts · 2 games · 2.5 pts/game\n"
-            "Bob `5` pts · 2 games · 2.5 pts/game\n"
-            "Cara `2` pts · 2 games · 1.0 pts/game"
+            "Alice `5` pts · `2` games · `2.5` pts/game\n"
+            "Bob `5` pts · `2` games · `2.5` pts/game\n"
+            "Cara `2` pts · `2` games · `1.0` pts/game"
         )
 
         # Both games together give every player exactly three points.
@@ -169,10 +170,10 @@ def test_tied_totals_keep_existing_order_and_points():
         identical = embeds.build_wrap_embed(identical_day)
         assert identical is not None
         assert field(identical, "Final standings") == (
-            "Alice `3` pts · 2 games · 1.5 pts/game\n"
-            "Bob `3` pts · 2 games · 1.5 pts/game\n"
-            "Cara `3` pts · 2 games · 1.5 pts/game\n"
-            "Dan `3` pts · 2 games · 1.5 pts/game"
+            "Alice `3` pts · `2` games · `1.5` pts/game\n"
+            "Bob `3` pts · `2` games · `1.5` pts/game\n"
+            "Cara `3` pts · `2` games · `1.5` pts/game\n"
+            "Dan `3` pts · `2` games · `1.5` pts/game"
         )
     finally:
         cleanup(old_path, old_prison, path)
@@ -194,9 +195,9 @@ def test_standings_order_stays_by_total_points_not_average():
         assert embed is not None
         # Bob has the best average, but remains below both four-point players.
         assert field(embed, "Final standings") == (
-            "Alice `4` pts · 2 games · 2.0 pts/game\n"
-            "Cara `4` pts · 2 games · 2.0 pts/game\n"
-            "Bob `3` pts · 1 game · 3.0 pts/game"
+            "Alice `4` pts · `2` games · `2.0` pts/game\n"
+            "Cara `4` pts · `2` games · `2.0` pts/game\n"
+            "Bob `3` pts · `1` game · `3.0` pts/game"
         )
     finally:
         cleanup(old_path, old_prison, path)
@@ -216,9 +217,9 @@ def test_final_standings_keep_full_names_without_reel_fallbacks():
         standings = field(embed, "Final standings")
         safe_long = discord.utils.escape_markdown(long_name)
         safe_tick = discord.utils.escape_markdown(tick_name)
-        assert f"{safe_long} `3` pts · 1 game · 3.0 pts/game" in standings
-        assert f"{safe_tick} `2` pts · 1 game · 2.0 pts/game" in standings
-        assert "Cara `1` pts · 1 game · 1.0 pts/game" in standings
+        assert f"{safe_long} `3` pts · `1` game · `3.0` pts/game" in standings
+        assert f"{safe_tick} `2` pts · `1` game · `2.0` pts/game" in standings
+        assert "Cara `1` pts · `1` game · `1.0` pts/game" in standings
         assert "Full names" not in {item.name for item in embed.fields}
         assert embed.fields[-1].name == "\u200b"
     finally:
@@ -274,8 +275,8 @@ def test_zero_point_player_in_a_real_contest_shows_zero_average():
         embed = embeds.build_wrap_embed(day)
         assert embed is not None
         assert field(embed, "Final standings") == (
-            "Bob `2` pts · 1 game · 2.0 pts/game\n"
-            "Alice `0.0` pts · 1 game · 0.0 pts/game"
+            "Bob `2` pts · `1` game · `2.0` pts/game\n"
+            "Alice `0.0` pts · `1` game · `0.0` pts/game"
         )
     finally:
         cleanup(old_path, old_prison, path)
@@ -393,12 +394,186 @@ def test_long_standings_partition_complete_player_lines():
             line for item in standing_fields for line in (item.value or "").splitlines()
         ]
         expected_lines = [
-            f"{name} `{points}` pts · 1 game · {points:.1f} pts/game"
+            f"{name} `{points}` pts · `1` game · `{points:.1f}` pts/game"
             for name, points in sorted(players, key=lambda player: (-player[1], player[0]))
         ]
         assert actual_lines == expected_lines
         assert len(actual_lines) == len(set(actual_lines)) == 24
         assert embed.fields[-1].name == "\u200b"
+    finally:
+        cleanup(old_path, old_prison, path)
+
+
+def _new_closing_lines(category, name, pts):
+    """The five orchestrator-supplied closing lines for one placement category."""
+    lines = {
+        "first": (
+            f"{name} takes first. The victory speech has already exceeded the channel limit.",
+            f"{name} wins with `{pts}` pts. Please return the borrowed brain cells before tomorrow.",
+            f"First place for {name}. The rest of us were clearly collecting research data.",
+            f"{name} tops the board. A suspicious amount of competence for a casual pastime.",
+            f"{name}, enjoy the lead. Tomorrow's puzzles have not agreed to cooperate.",
+        ),
+        "second": (
+            f"{name} takes second. Basically first, if you ignore one inconvenient person.",
+            f"{name}, close enough to win in the version of events you tell tomorrow.",
+            f"Second for {name}. The silver lining is unusually literal today.",
+            f"{name} finishes on `{pts}` pts. One more good guess and this becomes a very different speech.",
+            f"{name}, an excellent result with just enough disappointment to encourage a rematch.",
+        ),
+        "middle": (
+            f"{name} occupies the middle. A strategic position from which to blame both ends.",
+            f"{name}, neither a victory lap nor a rescue mission. Efficient moderation.",
+            f"`{pts}` pts for {name}. The statistical equivalent of a sensible cardigan.",
+            f"{name} keeps the leaderboard structurally balanced. Somebody has to.",
+            f"{name}, safely in the middle: close to the action, far from the paperwork.",
+        ),
+        "second_last": (
+            f"{name} avoids last. Technically a survival story, not a success story.",
+            f"{name}, one place above disaster. Excellent use of the available buffer.",
+            f"{name} escapes the wooden spoon. Please stop checking whether the scores are final.",
+            f"Not last for {name}. The celebration is small, but legally valid.",
+            f"{name}, the person below you would like a word about your victory dance.",
+        ),
+        "last": (
+            f"{name} takes last. A generous donation to everyone else's confidence.",
+            f"{name}, today's scores have been filed under character development.",
+            f"Last place for {name}. The comeback now has a properly dramatic opening chapter.",
+            f"{name} gets `{pts}` pts and unlimited material for a revenge arc.",
+            f"{name}, even the bottom of the table is still on the table.",
+        ),
+    }
+    return lines[category]
+
+
+def _neutral_lines(name):
+    return (
+        f"{name}, did you know octopuses have three hearts? None of them has to endure this leaderboard.",
+        f"{name}, did you know sharks predate trees? Your rematch can probably wait until tomorrow.",
+        f"{name}, did you know wombats produce cube-shaped droppings? That's today's unrelated fact. You're welcome.",
+        f"{name}, die Punkte sind gezählt. Beschwerden bitte in dreifacher Ausfertigung.",
+    )
+
+
+def test_wrap_comment_is_deterministic_and_keeps_original_selection():
+    day = "2025-04-01"
+    standings = [(10, 9), (11, 7), (12, 5), (13, 3), (14, 1)]
+    names = {10: "Anna", 11: "Ben", 12: "Cleo", 13: "Dev", 14: "Eli"}
+
+    first = embeds._wrap_comment(day, names, standings)
+    second = embeds._wrap_comment(day, names, standings)
+    assert first == second, (first, second)
+
+    calls = []
+    original_random = random.Random
+
+    class RecordingRandom:
+        def __init__(self, seed):
+            self.seed = seed
+
+        def choice(self, seq):
+            options = list(seq)
+            calls.append((self.seed, options))
+            return original_random(self.seed).choice(options)
+
+    try:
+        embeds.random.Random = RecordingRandom
+        selected = embeds._wrap_comment(day, names, standings)
+    finally:
+        embeds.random.Random = original_random
+
+    assert selected == first
+    # Placement, category and line still use the original date-seeded order.
+    assert [seed for seed, _options in calls] == [
+        f"{day}:placement", f"{day}:kind", f"{day}:line"
+    ], calls
+    assert calls[0][1] == list(range(len(standings))), calls[0]
+
+    idx = original_random(f"{day}:placement").choice(range(len(standings)))
+    expected_kinds = []
+    if idx == 0:
+        expected_kinds.append("first")
+    if idx == 1 and len(standings) > 2:
+        expected_kinds.append("second")
+    if idx == len(standings) - 2:
+        expected_kinds.append("second_last")
+    if idx == len(standings) - 1 and len(standings) > 1:
+        expected_kinds.append("last")
+    if not expected_kinds:
+        expected_kinds.append("middle")
+    assert calls[1][1] == expected_kinds, (calls[1], expected_kinds)
+    assert first in calls[2][1], (first, calls[2][1])
+
+
+def test_wrap_comment_categories_expose_new_lines_and_single_german_variant():
+    day = "2025-04-02"
+    standings = [(1, 10), (2, 8), (3, 6), (4, 4), (5, 2)]
+    names = {1: "Anna", 2: "Ben", 3: "Cleo", 4: "Dev", 5: "Eli"}
+    categories = ("first", "second", "middle", "second_last", "last")
+    # Five-player board: each forced index maps cleanly to one category.
+    expected_pool_sizes = {"first": 13, "second": 13, "middle": 13, "second_last": 13, "last": 15}
+    original_random = random.Random
+    captured = []
+
+    class ForcedPlacementRandom:
+        forced_index = 0
+
+        def __init__(self, seed):
+            self.seed = seed
+
+        def choice(self, seq):
+            options = list(seq)
+            if self.seed == f"{day}:placement":
+                return ForcedPlacementRandom.forced_index
+            if self.seed == f"{day}:line":
+                captured.append(options)
+                return options[0]
+            assert options == [categories[ForcedPlacementRandom.forced_index]], options
+            return options[0]
+
+    try:
+        embeds.random.Random = ForcedPlacementRandom
+        for index, category in enumerate(categories):
+            ForcedPlacementRandom.forced_index = index
+            captured.clear()
+            result = embeds._wrap_comment(day, names, standings)
+            assert len(captured) == 1, (category, captured)
+            pool = captured[0]
+            assert result == pool[0], (category, result, pool[0])
+            assert len(pool) == expected_pool_sizes[category], (category, len(pool))
+
+            name, pts = names[standings[index][0]], standings[index][1]
+            for line in _new_closing_lines(category, name, pts):
+                assert line in pool, (category, line)
+            for line in _neutral_lines(name):
+                assert line in pool, (category, line)
+            # The German line joins the single rotation once; it is not a footer.
+            german = (f"{name}, die Punkte sind gezählt. "
+                      "Beschwerden bitte in dreifacher Ausfertigung.")
+            assert pool.count(german) == 1, (category, pool)
+    finally:
+        embeds.random.Random = original_random
+
+
+def test_wrap_embed_has_exactly_one_deterministic_closing_field():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-04-03"
+    try:
+        add_score(day, 1, "Alice", "#90", 1)
+        add_score(day, 2, "Bob", "#90", 2)
+        add_score(day, 3, "Cara", "#90", 3)
+        add_score(day, 1, "Alice", "#91", 2)
+        add_score(day, 2, "Bob", "#91", 1)
+        add_score(day, 3, "Cara", "#91", 3)
+
+        first = embeds.build_wrap_embed(day)
+        second = embeds.build_wrap_embed(day)
+        assert first is not None and second is not None
+        assert [(item.name, item.value) for item in first.fields] == [
+            (item.name, item.value) for item in second.fields
+        ]
+        assert sum(item.name == "\u200b" for item in first.fields) == 1
+        assert first.fields[-1].name == "\u200b"
     finally:
         cleanup(old_path, old_prison, path)
 
@@ -416,4 +591,7 @@ if __name__ == "__main__":
     test_native_difficulty_formats_score_ratios_placements_and_regionle()
     test_regionle_named_modes_use_the_regionle_scale()
     test_long_standings_partition_complete_player_lines()
+    test_wrap_comment_is_deterministic_and_keeps_original_selection()
+    test_wrap_comment_categories_expose_new_lines_and_single_german_variant()
+    test_wrap_embed_has_exactly_one_deterministic_closing_field()
     print("All wrap tests passed.")

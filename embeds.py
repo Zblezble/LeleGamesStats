@@ -319,24 +319,44 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
             f"🏆 {name} wins the day with `{pts}` pts. Rematch pending, obviously.",
             f"🏆 {name} holds the crown with `{pts}` pts. What an entirely planned outcome.",
             f"🏆 {name}, today's champion. And they said casual gaming couldn't get serious.",
+            f"{name} takes first. The victory speech has already exceeded the channel limit.",
+            f"{name} wins with `{pts}` pts. Please return the borrowed brain cells before tomorrow.",
+            f"First place for {name}. The rest of us were clearly collecting research data.",
+            f"{name} tops the board. A suspicious amount of competence for a casual pastime.",
+            f"{name}, enjoy the lead. Tomorrow's puzzles have not agreed to cooperate.",
         ),
         "second": (
             f"{name} lands second with `{pts}` pts. Excellent hostilities resume tomorrow.",
             f"{name}, silver today. Close enough to taste the victory snacks.",
             f"{name} finishes second with `{pts}` pts. One tiny rematch from a narrative correction.",
             f"{name}, one spot short of glory and one *rematch* from fixing it.",
+            f"{name} takes second. Basically first, if you ignore one inconvenient person.",
+            f"{name}, close enough to win in the version of events you tell tomorrow.",
+            f"Second for {name}. The silver lining is unusually literal today.",
+            f"{name} finishes on `{pts}` pts. One more good guess and this becomes a very different speech.",
+            f"{name}, an excellent result with just enough disappointment to encourage a rematch.",
         ),
         "second_last": (
             f"{name} narrowly escapes last. That's a victory with slightly worse marketing.",
             f"{name} finishes just above bottom. Staying out of the basement lighting the way.",
             f"{name} avoided the basement by a whisker. Not quite last, oddly satisfying.",
             f"{name}, this close to last but separated by the luxurious distinction of one other person.",
+            f"{name} avoids last. Technically a survival story, not a success story.",
+            f"{name}, one place above disaster. Excellent use of the available buffer.",
+            f"{name} escapes the wooden spoon. Please stop checking whether the scores are final.",
+            f"Not last for {name}. The celebration is small, but legally valid.",
+            f"{name}, the person below you would like a word about your victory dance.",
         ),
         "middle": (
             f"{name} finishes at `{pts}` pts. A middle-of-the-pack diplomat.",
             f"Not first, not last. {name} brings respectable balance to the group.",
             f"{name} gets no medal ceremony today, just the quiet promise of future escalation.",
             f"{name} finished mid-pack with `{pts}` pts. Close enough to the summit to hear the laughter.",
+            f"{name} occupies the middle. A strategic position from which to blame both ends.",
+            f"{name}, neither a victory lap nor a rescue mission. Efficient moderation.",
+            f"`{pts}` pts for {name}. The statistical equivalent of a sensible cardigan.",
+            f"{name} keeps the leaderboard structurally balanced. Somebody has to.",
+            f"{name}, safely in the middle: close to the action, far from the paperwork.",
         ),
         "last": (
             f"Not everyone can be first. {name} found a different way to contribute.",
@@ -345,9 +365,20 @@ def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[
             f"{name} finishes with `{pts}` pts. Already plotting the triumphant comeback.",
             f"{name} accepted the wooden spoon with grace and an inconvenient rematch request.",
             f"{name} has truly mastered the art of giving everyone else a confidence boost.",
+            f"{name} takes last. A generous donation to everyone else's confidence.",
+            f"{name}, today's scores have been filed under character development.",
+            f"Last place for {name}. The comeback now has a properly dramatic opening chapter.",
+            f"{name} gets `{pts}` pts and unlimited material for a revenge arc.",
+            f"{name}, even the bottom of the table is still on the table.",
         ),
     }
-    return random.Random(f"{board_date}:line").choice(lines[kind])
+    neutral = (
+        f"{name}, did you know octopuses have three hearts? None of them has to endure this leaderboard.",
+        f"{name}, did you know sharks predate trees? Your rematch can probably wait until tomorrow.",
+        f"{name}, did you know wombats produce cube-shaped droppings? That's today's unrelated fact. You're welcome.",
+        f"{name}, die Punkte sind gezählt. Beschwerden bitte in dreifacher Ausfertigung.",
+    )
+    return random.Random(f"{board_date}:line").choice(lines[kind] + neutral)
 
 
 def _wrap_standings_lines(standings: list[tuple[int, int | float]], names: dict[int, str], grouped) -> list[str]:
@@ -367,7 +398,7 @@ def _wrap_standings_lines(standings: list[tuple[int, int | float]], names: dict[
         display_name = re.sub(r"\s+", " ", names.get(uid, "Someone")).strip() or "Someone"
         safe_name = discord.utils.escape_mentions(discord.utils.escape_markdown(display_name))
         lines.append(
-            f"{safe_name} `{points}` pts · {played} {game_noun} · {average:.1f} pts/game"
+            f"{safe_name} `{points}` pts · `{played}` {game_noun} · `{average:.1f}` pts/game"
         )
     return lines
 
