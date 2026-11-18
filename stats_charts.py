@@ -17,11 +17,15 @@ import games
 
 AttemptStatus = Literal["solved", "dnf", "missing"]
 ScoreStatus = Literal["score", "dnf", "missing"]
-# Fixed calendar-day window for the personal game history chart.
+# Calendar-day windows for the personal game history chart. The compact
+# 20-day layout uses left-half blocks: ``▌▌▌`` has built-in gaps, so no
+# explicit spaces are needed and it occupies the same width as ten spaced cells.
 CHART_PERIOD_DAYS = 10
+CHART_PERIOD_CHOICES = (10, 20)
 # Half-height blocks stay aligned in Discord's monospace font while leaving a
 # visible seam between vertically stacked attempts.
 ATTEMPT_SYMBOL = "▄"
+COMPACT_SYMBOL = "▌"
 SCORE_SYMBOL = "█"
 _ATTEMPT_DISPLAY = re.compile(r"^([1-9]\d*)\s*/\s*([1-9]\d*)")
 _DNF_DISPLAY = re.compile(r"^(?:dnf|x\s*/\s*([1-9]\d*))$", re.IGNORECASE)
@@ -92,6 +96,16 @@ def max_attempts_for(game_name: str) -> int:
     return int(games.FIXED_ATTEMPT_GAMES[family]["max_attempts"])
 
 
+def chart_layout(period: int, *, spaced_symbol: str,
+                 compact_symbol: str) -> tuple[str, int]:
+    """Return the symbol and cell width for a supported chart period."""
+    if period == CHART_PERIOD_DAYS:
+        return spaced_symbol, 2
+    if period == CHART_PERIOD_CHOICES[-1]:
+        return compact_symbol, 1
+    raise ValueError("Chart period must be 10 or 20 days.")
+
+
 def score_chart_meta(game_name: str) -> dict:
     """Return renderer/unit metadata for a supported score-history game."""
     family = games.score_chart_family(game_name)
@@ -128,10 +142,15 @@ def resolve_chart_game(user_id: int, selected_game: str,
     exact = [name for name in candidates if name.casefold() == selected]
     if exact:
         return exact[0], []
-    # A base-name request may use its sole played variant. An explicit variant
-    # request must not silently substitute a different variant.
+    # A base-name request may use its sole played variant, or the registry's
+    # designated active variant. An explicit variant request must not silently
+    # substitute a different variant.
     if "(" in selected:
         return None, []
+    preferred = games.chart_preferred_variant(family)
+    if preferred and any(name.casefold() == preferred.casefold()
+                         for name in candidates):
+        return preferred, []
     if len(candidates) == 1:
         return candidates[0], []
     if len(candidates) > 1:
@@ -298,7 +317,8 @@ def summarize_attempts(daily_results: list[DailyAttempt], *,
 
 def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                          start_date: date, end_date: date, *,
-                         title: str = "Attempt history") -> str:
+                         title: str = "Attempt history",
+                         period: int = CHART_PERIOD_DAYS) -> str:
     """Render an aligned vertical Unicode bar chart in a code block."""
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
         raise ValueError("max_attempts must be a positive integer.")
@@ -323,7 +343,9 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
         normalized.append(result)
 
     axis_width = len(str(max_attempts))
-    cell_width = 2
+    bar_symbol, cell_width = chart_layout(
+        period, spaced_symbol=ATTEMPT_SYMBOL, compact_symbol=COMPACT_SYMBOL,
+    )
     lines = [
         f"{title.upper()} · {start.isoformat()} to {end.isoformat()}",
         "Guesses (lower = better)",
@@ -335,12 +357,12 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
         for result in normalized:
             if (result.status == "solved" and result.attempts is not None
                     and result.attempts >= attempt):
-                symbol = ATTEMPT_SYMBOL
+                symbol = bar_symbol
             elif result.status == "dnf" and attempt == max_attempts:
                 symbol = "X"
             else:
                 symbol = " "
-            cells.append(" " + symbol)
+            cells.append(symbol.rjust(cell_width))
         lines.append((f"{attempt:>{axis_width}} │" + "".join(cells)).rstrip())
 
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(normalized)))
@@ -350,7 +372,7 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
     ]
     lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
     lines.append("")
-    lines.append(f"{ATTEMPT_SYMBOL} = attempt · X = DNF · blank = no result")
+    lines.append(f"{bar_symbol} = attempt · X = DNF · blank = no result")
     return "\n".join(lines)
 
 
@@ -434,8 +456,9 @@ def summarize_scaled_scores(daily_results: list[DailyScore], *, unit: str = "pts
 
 def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float | None,
                              start_date: date, end_date: date, *,
-                             title: str = "Score history", unit: str = "score") -> str:
-    """Render raw correct-answer scores with one row per whole score."""
+                             title: str = "Score history", unit: str = "score",
+                             period: int = CHART_PERIOD_DAYS) -> str:
+    """Render raw correct-answer scores with one row per positive score."""
     results = _validate_score_results(daily_results, start_date, end_date)
     values = [result.score for result in results if result.status == "score"
               and result.score is not None]
@@ -449,7 +472,9 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
         chart_max = 1
 
     axis_width = len(str(chart_max))
-    cell_width = 2
+    bar_symbol, cell_width = chart_layout(
+        period, spaced_symbol=ATTEMPT_SYMBOL, compact_symbol=COMPACT_SYMBOL,
+    )
     lines = [
         f"{title.upper()} · {start_date.isoformat()} to {end_date.isoformat()}",
         f"{unit.capitalize()} (higher = better)",
@@ -461,17 +486,14 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
         for result in results:
             if (result.status == "score" and result.score is not None
                     and result.score >= level):
-                symbol = ATTEMPT_SYMBOL
+                symbol = bar_symbol
             elif result.status == "dnf" and level == chart_max:
                 symbol = "X"
             else:
                 symbol = " "
-            cells.append(" " + symbol)
+            cells.append(symbol.rjust(cell_width))
         lines.append((f"{level:>{axis_width}} │" + "".join(cells)).rstrip())
 
-    zero_cells = [" 0" if result.status == "score" and result.score == 0 else "  "
-                  for result in results]
-    lines.append(f"{'0':>{axis_width}} │" + "".join(zero_cells).rstrip())
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(results)))
     labels = [
         f"{result.date.day:02d}" if index % 4 == 0 else "  "
@@ -480,14 +502,15 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
     lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
     lines.append("")
     lines.append(
-        f"{ATTEMPT_SYMBOL} = score · X = DNF · 0 = zero score · blank = no result"
+        f"{bar_symbol} = score · X = DNF · blank = no result or zero score"
     )
     return "\n".join(lines)
 
 
 def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: float | None,
                               start_date: date, end_date: date, *,
-                              title: str = "Score history", unit: str = "pts") -> str:
+                              title: str = "Score history", unit: str = "pts",
+                              period: int = CHART_PERIOD_DAYS) -> str:
     """Render raw scores on a compact, dynamically scaled ten-row chart.
 
     Scores are rounded to the nearest visual bucket. A score in the lower half
@@ -512,7 +535,9 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
     }
 
     axis_width = len(_format_number(scale_max))
-    cell_width = 2
+    bar_symbol, cell_width = chart_layout(
+        period, spaced_symbol=SCORE_SYMBOL, compact_symbol=COMPACT_SYMBOL,
+    )
     lines = [
         f"{title.upper()} · {start_date.isoformat()} to {end_date.isoformat()}",
         f"Raw {unit} (higher = better)",
@@ -524,12 +549,12 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
         cells = []
         for result in results:
             if result.status == "score" and levels[id(result)] >= level:
-                symbol = SCORE_SYMBOL
+                symbol = bar_symbol
             elif result.status == "dnf" and level == chart_height:
                 symbol = "X"
             else:
                 symbol = " "
-            cells.append(" " + symbol)
+            cells.append(symbol.rjust(cell_width))
         lines.append(
             f"{_format_number(tick):>{axis_width}} │" + "".join(cells).rstrip()
         )
@@ -542,6 +567,6 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
     lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
     lines.append("")
     lines.append(
-        f"{SCORE_SYMBOL} = score · X = DNF · blank = no result or low/zero score"
+        f"{bar_symbol} = score · X = DNF · blank = no result or low/zero score"
     )
     return "\n".join(lines)

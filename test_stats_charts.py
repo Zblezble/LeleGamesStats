@@ -268,23 +268,37 @@ class AttemptModelTests(unittest.TestCase):
         finally:
             cleanup(old_path, old_today, path)
 
-    def test_multiple_variants_require_an_exact_choice(self):
+    def test_multiple_variants_use_the_designated_active_variant(self):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Chessle (Medium)", "#1", 1, 2.0, "2/6")
             add_score("2026-11-09", 1, "Alice", "Chessle (Hard)", "#2", 1, 3.0, "3/6")
             resolved, variants = stats_charts.resolve_chart_game(
                 1, "Chessle", day(5), day(9))
-            self.assertIsNone(resolved)
-            self.assertEqual(variants, ["Chessle (Hard)", "Chessle (Medium)"])
-            resolved, variants = stats_charts.resolve_chart_game(
-                1, "Chessle (Medium)", day(5), day(9))
             self.assertEqual((resolved, variants), ("Chessle (Medium)", []))
 
-            # An explicit missing variant must not be replaced by another variant.
+            # An explicit variant remains supported for manual queries, but an
+            # explicit missing variant must not be replaced by another variant.
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Chessle (Hard)", day(5), day(9))
+            self.assertEqual((resolved, variants), ("Chessle (Hard)", []))
             resolved, variants = stats_charts.resolve_chart_game(
                 1, "Chessle (Expert)", day(5), day(9))
             self.assertEqual((resolved, variants), (None, []))
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_magnitudle_uses_size_it_up_results(self):
+        old_path, old_today, path = fresh_db("2026-11-09")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Magnitudle (Size It Up)", "#1", 1, -230.0, "230/500")
+            add_score("2026-11-09", 1, "Alice", "Magnitudle (Other)", "#2", 1, -100.0, "100/500")
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Magnitudle", day(5), day(9))
+            self.assertEqual(
+                (resolved, variants),
+                ("Magnitudle (Size It Up)", []),
+            )
         finally:
             cleanup(old_path, old_today, path)
 
@@ -313,14 +327,28 @@ class AttemptModelTests(unittest.TestCase):
             values = {choice.value for choice in choices}
             self.assertIn("Worldle", values)
             self.assertIn("Chessle", values)
+            self.assertIn("Magnitudle", values)
             self.assertIn("Trivmount", values)
             self.assertIn("Maptap", values)
             self.assertNotIn("Songless", values)
             self.assertNotIn("Globle", values)
+            self.assertNotIn("Chessle (Medium)", values)
+            self.assertNotIn("Magnitudle (Size It Up)", values)
         finally:
             cleanup(old_path, old_today, path)
 
-    def test_wordle_is_chartable_even_when_disabled_for_ingest(self):
+    def test_disabled_games_are_hidden_from_chart_autocomplete(self):
+        old_disabled = config.DISABLED_GAMES
+        config.DISABLED_GAMES = {"wordle"}
+        try:
+            choices = asyncio.run(commands._chart_game_autocomplete(None, ""))
+            values = {choice.value for choice in choices}
+            self.assertNotIn("Wordle", values)
+            self.assertIn("Worldle", values)
+        finally:
+            config.DISABLED_GAMES = old_disabled
+
+    def test_wordle_chart_metadata_remains_available_when_disabled(self):
         self.assertEqual(games.fixed_attempt_family("Wordle"), "Wordle")
         self.assertEqual(stats_charts.max_attempts_for("Wordle"), 6)
 
@@ -388,11 +416,10 @@ class AttemptModelTests(unittest.TestCase):
             " 3 │ ▄       ▄\n"
             " 2 │ ▄       ▄\n"
             " 1 │ ▄       ▄\n"
-            " 0 │   0\n"
             "   └──────────\n"
             "    09      13\n"
             "\n"
-            "▄ = score · X = DNF · 0 = zero score · blank = no result"
+            "▄ = score · X = DNF · blank = no result or zero score"
         )
         self.assertEqual(actual, expected)
         self.assertEqual(
@@ -586,15 +613,45 @@ class AttemptModelTests(unittest.TestCase):
         for field in embed.fields:
             self.assertLessEqual(len(field.value or ""), 1024)
 
-    def test_chart_period_and_options_are_simplified(self):
+    def test_chart_period_options_and_defaults(self):
         self.assertEqual(stats_charts.CHART_PERIOD_DAYS, 10)
+        self.assertEqual(stats_charts.CHART_PERIOD_CHOICES, (10, 20))
         parameters = inspect.signature(commands.stats).parameters
-        self.assertEqual(list(parameters), ["interaction", "game", "user", "public"])
-        self.assertNotIn("period", parameters)
-        self.assertNotIn("player", parameters)
-        self.assertFalse(
-            hasattr(commands.stats, "__discord_app_commands_param_choices__")
+        self.assertEqual(
+            list(parameters), ["interaction", "game", "period", "user", "public"]
         )
+        self.assertEqual(parameters["period"].default, 10)
+        self.assertNotIn("player", parameters)
+        choices = cast(Any, commands.stats).__discord_app_commands_param_choices__["period"]
+        self.assertEqual([choice.value for choice in choices], [10, 20])
+
+    def test_twenty_day_chart_uses_compact_same_width_layout(self):
+        spaced_results = [
+            solved(day(index), (index % 6) + 1) for index in range(1, 11)
+        ]
+        compact_results = [
+            solved(day(index), (index % 6) + 1) for index in range(1, 21)
+        ]
+        spaced = stats_charts.render_attempt_chart(
+            spaced_results, 6, day(1), day(10), period=10,
+        )
+        compact = stats_charts.render_attempt_chart(
+            compact_results, 6, day(1), day(20), period=20,
+        )
+        spaced_rows = spaced.splitlines()[3:9]
+        compact_rows = compact.splitlines()[3:9]
+        self.assertEqual(
+            max(len(row) for row in spaced_rows),
+            max(len(row) for row in compact_rows),
+        )
+        self.assertTrue(all("▌" in row for row in compact_rows))
+        self.assertIn("▌" * 20, compact)
+
+        scaled = stats_charts.render_scaled_score_chart(
+            [scored(day(index), 500, 1000) for index in range(1, 21)],
+            1000, day(1), day(20), period=20,
+        )
+        self.assertIn("▌" * 20, scaled)
 
     def test_chart_is_private_by_default_and_public_on_request(self):
         old_path, old_today, path = fresh_db("2026-11-18")

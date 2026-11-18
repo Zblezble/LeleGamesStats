@@ -17,7 +17,8 @@ import csv
 
 from config import today_str
 from games import (ACTIVE_GAME_META, FIXED_ATTEMPT_GAMES, SCORE_CHART_GAMES,
-                   fixed_attempt_family, get_game_icon, score_chart_family)
+                   fixed_attempt_family, get_game_icon, is_game_enabled,
+                   score_chart_family)
 
 
 @app_commands.describe(
@@ -156,23 +157,21 @@ def build_all_time_stats_embed(target_id: int, target_name: str) -> discord.Embe
 
 
 async def _chart_game_autocomplete(_interaction, current: str):
-    """Offer supported fixed-attempt games plus variants already in history."""
-    with sqlite3.connect(config.DB_PATH) as conn:
-        stored = [row[0] for row in conn.execute("SELECT DISTINCT game FROM scores").fetchall()]
-    names = {name for name in stored
-             if fixed_attempt_family(name) or score_chart_family(name)}
-    names.update(FIXED_ATTEMPT_GAMES)
-    names.update(SCORE_CHART_GAMES)
+    """Offer supported chart families; variants are resolved from history."""
+    names = {name for name in FIXED_ATTEMPT_GAMES if is_game_enabled(name)}
+    names.update(name for name in SCORE_CHART_GAMES if is_game_enabled(name))
     matches = [name for name in sorted(names, key=str.casefold)
                if current.casefold() in name.casefold()]
     return [app_commands.Choice(name=name, value=name) for name in matches[:25]]
 
 
 async def _send_game_chart(interaction: discord.Interaction, target: discord.abc.User,
-                           selected_game: str, *, public: bool = False):
+                           selected_game: str,
+                           period: int = stats_charts.CHART_PERIOD_DAYS,
+                           *, public: bool = False):
     """Resolve, render and send one user's game history chart."""
     end = date.fromisoformat(today_str())
-    start = end - timedelta(days=stats_charts.CHART_PERIOD_DAYS - 1)
+    start = end - timedelta(days=period - 1)
     if fixed_attempt_family(selected_game) is None and score_chart_family(selected_game) is None:
         await interaction.response.send_message(
             f"**{selected_game}** doesn't have a history chart yet.",
@@ -209,7 +208,8 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
             )
             return
         chart = stats_charts.render_attempt_chart(
-            daily_attempts, stats_charts.max_attempts_for(game), start, end, title=game,
+            daily_attempts, stats_charts.max_attempts_for(game), start, end,
+            title=game, period=period,
         )
         summary = stats_charts.summarize_attempts(daily_attempts)
     else:
@@ -225,7 +225,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         if meta["renderer"] == "fixed_score":
             chart = stats_charts.render_fixed_score_chart(
                 daily_scores, meta["max_score"], start, end,
-                title=game, unit=meta["unit"],
+                title=game, unit=meta["unit"], period=period,
             )
             summary = stats_charts.summarize_fixed_scores(
                 daily_scores, meta["max_score"],
@@ -233,7 +233,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         else:
             chart = stats_charts.render_scaled_score_chart(
                 daily_scores, meta["max_score"], start, end,
-                title=game, unit=meta["unit"],
+                title=game, unit=meta["unit"], period=period,
             )
             summary = stats_charts.summarize_scaled_scores(
                 daily_scores, unit=meta["unit"],
@@ -244,7 +244,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         color=0x64748B,
     )
     embed.add_field(
-        name=f"Last {stats_charts.CHART_PERIOD_DAYS} days",
+        name=f"Last {period} days",
         value=f"```text\n{chart}\n```",
         inline=False,
     )
@@ -258,18 +258,24 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
 
 @app_commands.describe(
     game="Optional game history chart",
+    period="Length of the game history (used only with game)",
     user="Defaults to you if omitted",
     public="Post the game chart publicly (default: private to you)",
 )
+@app_commands.choices(period=[
+    app_commands.Choice(name="Last 10 days", value=10),
+    app_commands.Choice(name="Last 20 days", value=20),
+])
 @app_commands.autocomplete(game=_chart_game_autocomplete)
 async def stats(interaction: discord.Interaction,
                 game: str | None = None,
+                period: int = stats_charts.CHART_PERIOD_DAYS,
                 user: discord.Member | None = None,
                 public: bool = False):
     target = user or interaction.user
 
     if game:
-        await _send_game_chart(interaction, target, game, public=public)
+        await _send_game_chart(interaction, target, game, period, public=public)
         return
 
     embed = build_all_time_stats_embed(target.id, target.display_name)

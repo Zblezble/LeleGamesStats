@@ -35,6 +35,12 @@ def game_available_on(name: str, weekday: int) -> bool:
     return True if days is None else weekday in days
 
 
+def is_game_enabled(game_name: str) -> bool:
+    """Whether ingest currently accepts this game (same prefix rule as parsing)."""
+    folded = (game_name or "").strip().casefold()
+    return not any(folded.startswith(disabled) for disabled in config.DISABLED_GAMES)
+
+
 def get_game_meta(game_name: str) -> dict:
     for key, meta in GAME_META.items():
         if game_name.startswith(key):
@@ -90,6 +96,19 @@ def score_chart_family(game_name: str) -> str | None:
         if folded == family_folded or folded.startswith(family_folded + " ("):
             return family
     return None
+
+
+# Selection stays at the family level, while these chart families read their
+# one actively played native variant.
+CHART_PREFERRED_VARIANTS = {
+    "Chessle": "Chessle (Medium)",
+    "Magnitudle": "Magnitudle (Size It Up)",
+}
+
+
+def chart_preferred_variant(family: str) -> str | None:
+    """Return the actively played variant used for a chart family, if any."""
+    return CHART_PREFERRED_VARIANTS.get(family)
 
 
 def get_game_icon(game_name: str) -> str:
