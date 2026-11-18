@@ -45,6 +45,29 @@ def get_game_meta(game_name: str) -> dict:
 # Registry minus any games turned off via DISABLED_GAMES — drives /games and /missing.
 ACTIVE_GAME_META = {k: v for k, v in GAME_META.items() if k.lower() not in config.DISABLED_GAMES}
 
+# Games with a reliable parsed attempt count and a fixed attempt maximum. These
+# power the personal fixed-attempt history chart. Songless is deliberately
+# absent: its displayed fraction counts solved songs, not attempts used.
+FIXED_ATTEMPT_GAMES = {
+    "Wordle": {"max_attempts": 6},
+    "Worldle": {"max_attempts": 6},
+    "Flagle": {"max_attempts": 6},
+    "Tradle": {"max_attempts": 6},
+    "Mathle": {"max_attempts": 6},
+    "Regionle": {"max_attempts": 7},
+    "Chessle": {"max_attempts": 6},
+}
+
+
+def fixed_attempt_family(game_name: str) -> str | None:
+    """Return the chart family for an exact game or its meaningful submode."""
+    folded = (game_name or "").strip().casefold()
+    for family in FIXED_ATTEMPT_GAMES:
+        family_folded = family.casefold()
+        if folded == family_folded or folded.startswith(family_folded + " ("):
+            return family
+    return None
+
 
 def get_game_icon(game_name: str) -> str:
     return get_game_meta(game_name)["icon"]

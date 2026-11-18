@@ -10,12 +10,13 @@ import config
 import db
 import embeds
 import handlers
-from datetime import datetime
+import stats_charts
+from datetime import date, datetime, timedelta
 
 import csv
 
 from config import today_str
-from games import ACTIVE_GAME_META, get_game_icon
+from games import ACTIVE_GAME_META, FIXED_ATTEMPT_GAMES, fixed_attempt_family, get_game_icon
 
 
 @app_commands.describe(
@@ -95,10 +96,8 @@ def _play_streaks(date_strings, today=None):
     return current, best_run
 
 
-@app_commands.describe(player="Defaults to you if omitted")
-async def stats(interaction: discord.Interaction, player: discord.Member = None):
-    target = player or interaction.user
-
+def build_all_time_stats_embed(target_id: int, target_name: str) -> discord.Embed | None:
+    """Build the existing all-time stats embed; None when no games are logged."""
     with sqlite3.connect(config.DB_PATH) as conn:
         c = conn.cursor()
         # Fetch all puzzles to compute crowns
@@ -113,7 +112,7 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
     for (bdate, game, pid), entries in puzzles.items():
         best_score = min((e[2] for e in entries if e[1] == 1), default=None)
         for uid, solved, rscore, dscore in entries:
-            if uid == target.id:
+            if uid == target_id:
                 rec = game_totals.setdefault(game, [0, 0, 0])
                 rec[0] += 1
                 if solved:
@@ -123,23 +122,22 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
                     rec[2] += 1
 
     if not game_totals:
-        await interaction.response.send_message(f"No games logged for {target.display_name} yet.", ephemeral=True)
-        return
+        return None
 
     total_played = sum(v[0] for v in game_totals.values())
     total_crowns = sum(v[2] for v in game_totals.values())
 
-    personal_bests = _personal_best_scores(all_rows, target.id)
+    personal_bests = _personal_best_scores(all_rows, target_id)
     current_streak, best_streak = _play_streaks(
-        [bdate for bdate, _game, _pid, uid, _s, _r, _d in all_rows if uid == target.id]
+        [bdate for bdate, _game, _pid, uid, _s, _r, _d in all_rows if uid == target_id]
     )
 
     embed = discord.Embed(
-        title=f"All-time stats: {target.display_name}",
+        title=f"All-time stats: {target_name}",
         description=f"{total_played} games logged · {total_crowns} 🥇 golds",
         color=0x64748B
     )
-    embed.add_field(name="Prison days", value=f"Lifetime total: {db.prison_count(target.id)}", inline=False)
+    embed.add_field(name="Prison days", value=f"Lifetime total: {db.prison_count(target_id)}", inline=False)
     streak_line = f"Longest streak: {best_streak} days"
     if current_streak:
         streak_line += f" · current: {current_streak} days"
@@ -153,6 +151,106 @@ async def stats(interaction: discord.Interaction, player: discord.Member = None)
         lines.append(f"{icon} **{game}** · {played} played · {win_rate}% solved · {crowns} 🥇 · PB `{pb}`")
 
     embeds._append_daily_fields(embed, [("By game", "\n".join(lines), False)])
+    return embed
+
+
+async def _chart_game_autocomplete(_interaction, current: str):
+    """Offer supported fixed-attempt games plus variants already in history."""
+    with sqlite3.connect(config.DB_PATH) as conn:
+        stored = [row[0] for row in conn.execute("SELECT DISTINCT game FROM scores").fetchall()]
+    names = {name for name in stored if fixed_attempt_family(name)}
+    names.update(FIXED_ATTEMPT_GAMES)
+    matches = [name for name in sorted(names, key=str.casefold)
+               if current.casefold() in name.casefold()]
+    return [app_commands.Choice(name=name, value=name) for name in matches[:25]]
+
+
+async def _send_game_chart(interaction: discord.Interaction, target: discord.abc.User,
+                           selected_game: str, period: int):
+    """Resolve, render and send one user's fixed-attempt history chart."""
+    end = date.fromisoformat(today_str())
+    start = end - timedelta(days=period - 1)
+    if fixed_attempt_family(selected_game) is None:
+        await interaction.response.send_message(
+            f"**{selected_game}** doesn't have a fixed-attempt history chart yet.",
+            ephemeral=True,
+        )
+        return
+
+    game, variants = stats_charts.resolve_chart_game(target.id, selected_game, start, end)
+    if game is None:
+        if variants:
+            shown = ", ".join(f"`{name}`" for name in variants)
+            await interaction.response.send_message(
+                f"Multiple **{fixed_attempt_family(selected_game)}** variants were played "
+                f"in this period. Pick one: {shown}.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                f"No **{selected_game}** results for {target.display_name} between "
+                f"{start.isoformat()} and {end.isoformat}.",
+                ephemeral=True,
+            )
+        return
+
+    daily_results = stats_charts.load_attempts(target.id, game, start, end)
+    if not any(result.status != "missing" for result in daily_results):
+        await interaction.response.send_message(
+            f"No **{game}** results for {target.display_name} between "
+            f"{start.isoformat()} and {end.isoformat}.",
+            ephemeral=True,
+        )
+        return
+
+    max_attempts = stats_charts.max_attempts_for(game)
+    chart = stats_charts.render_attempt_chart(
+        daily_results, max_attempts, start, end, title=game,
+    )
+    embed = discord.Embed(
+        title=f"{get_game_icon(game)} {game} · {target.display_name}",
+        color=0x64748B,
+    )
+    embed.add_field(
+        name=f"Last {period} days",
+        value=f"```text\n{chart}\n```",
+        inline=False,
+    )
+    embed.add_field(
+        name="Summary",
+        value=stats_charts.summarize_attempts(daily_results),
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+@app_commands.describe(
+    game="Optional game history chart",
+    period="Length of the game history (used only with game)",
+    user="Defaults to you if omitted",
+    player="Legacy alias for user",
+)
+@app_commands.choices(period=[
+    app_commands.Choice(name="Last 14 days", value=14),
+    app_commands.Choice(name="Last 30 days", value=30),
+])
+@app_commands.autocomplete(game=_chart_game_autocomplete)
+async def stats(interaction: discord.Interaction,
+                game: str | None = None,
+                period: int = 14,
+                user: discord.Member | None = None,
+                player: discord.Member | None = None):
+    target = user or player or interaction.user
+
+    if game:
+        await _send_game_chart(interaction, target, game, period)
+        return
+
+    embed = build_all_time_stats_embed(target.id, target.display_name)
+    if embed is None:
+        await interaction.response.send_message(
+            f"No games logged for {target.display_name} yet.", ephemeral=True)
+        return
     await interaction.response.send_message(embed=embed)
 
 
