@@ -108,11 +108,11 @@ class AttemptModelTests(unittest.TestCase):
             "Guesses (lower = better)\n"
             "\n"
             "6 │     X   █\n"
-            "5 │\n"
-            "4 │\n"
-            "3 │   █\n"
-            "2 │\n"
-            "1 │ █\n"
+            "5 │         █\n"
+            "4 │         █\n"
+            "3 │   █     █\n"
+            "2 │   █     █\n"
+            "1 │ █ █     █\n"
             "  └──────────\n"
             "   05      09\n"
             "\n"
@@ -326,9 +326,13 @@ class AttemptModelTests(unittest.TestCase):
             cleanup(old_path, old_today, path)
 
     def test_rendered_history_fits_discord_embed_limits(self):
-        results = [solved(day(index), (index % 6) + 1) for index in range(1, 21)]
-        chart = stats_charts.render_attempt_chart(results, 6, day(1), day(20))
-        self.assertLessEqual(max(len(line) for line in chart.splitlines()), 44)
+        period = stats_charts.CHART_PERIOD_DAYS
+        results = [solved(day(index), (index % 6) + 1) for index in range(1, period + 1)]
+        chart = stats_charts.render_attempt_chart(
+            results, 6, day(1), day(period))
+        self.assertLessEqual(
+            max(len(line) for line in chart.splitlines()[3:9]), 24
+        )
         embed = discord.Embed(title="History")
         embed.add_field(name="Chart", value=f"```text\n{chart}\n```", inline=False)
         embed.add_field(
@@ -340,11 +344,15 @@ class AttemptModelTests(unittest.TestCase):
         for field in embed.fields:
             self.assertLessEqual(len(field.value or ""), 1024)
 
-    def test_chart_periods_use_mobile_friendly_defaults(self):
-        signature = inspect.signature(commands.stats)
-        self.assertEqual(signature.parameters["period"].default, 10)
-        choices = cast(Any, commands.stats).__discord_app_commands_param_choices__.get("period", [])
-        self.assertEqual([choice.value for choice in choices], [10, 20])
+    def test_chart_period_and_options_are_simplified(self):
+        self.assertEqual(stats_charts.CHART_PERIOD_DAYS, 10)
+        parameters = inspect.signature(commands.stats).parameters
+        self.assertEqual(list(parameters), ["interaction", "game", "user", "public"])
+        self.assertNotIn("period", parameters)
+        self.assertNotIn("player", parameters)
+        self.assertFalse(
+            hasattr(commands.stats, "__discord_app_commands_param_choices__")
+        )
 
     def test_chart_is_private_by_default_and_public_on_request(self):
         old_path, old_today, path = fresh_db("2026-11-18")
@@ -368,7 +376,7 @@ class AttemptModelTests(unittest.TestCase):
 
             interaction = cast(Any, FakeInteraction())
             asyncio.run(commands._send_game_chart(
-                interaction, cast(Any, FakeUser()), "Worldle", 10))
+                interaction, cast(Any, FakeUser()), "Worldle"))
             self.assertEqual(len(interaction.response.calls), 1)
             self.assertTrue(interaction.response.calls[0]["ephemeral"])
             self.assertEqual(
@@ -378,12 +386,12 @@ class AttemptModelTests(unittest.TestCase):
 
             public_interaction = cast(Any, FakeInteraction())
             asyncio.run(commands._send_game_chart(
-                public_interaction, cast(Any, FakeUser()), "Worldle", 20, public=True))
+                public_interaction, cast(Any, FakeUser()), "Worldle", public=True))
             self.assertEqual(len(public_interaction.response.calls), 1)
             self.assertFalse(public_interaction.response.calls[0]["ephemeral"])
             self.assertEqual(
                 public_interaction.response.calls[0]["embed"].fields[0].name,
-                "Last 20 days",
+                "Last 10 days",
             )
         finally:
             cleanup(old_path, old_today, path)
