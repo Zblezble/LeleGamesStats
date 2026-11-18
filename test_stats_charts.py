@@ -119,16 +119,16 @@ class AttemptModelTests(unittest.TestCase):
             "TEST · 2026-11-05 to 2026-11-09\n"
             "Guesses (lower = better)\n"
             "\n"
-            "6 │     X   ▮\n"
-            "5 │         ▮\n"
-            "4 │         ▮\n"
-            "3 │   ▮     ▮\n"
-            "2 │   ▮     ▮\n"
-            "1 │ ▮ ▮     ▮\n"
+            "6 │     X   ▄\n"
+            "5 │         ▄\n"
+            "4 │         ▄\n"
+            "3 │   ▄     ▄\n"
+            "2 │   ▄     ▄\n"
+            "1 │ ▄ ▄     ▄\n"
             "  └──────────\n"
             "   05      09\n"
             "\n"
-            "▮ = attempt · X = DNF · blank = no result"
+            "▄ = attempt · X = DNF · blank = no result"
         )
         self.assertEqual(actual, expected)
 
@@ -136,7 +136,7 @@ class AttemptModelTests(unittest.TestCase):
         results = [solved(day(1), 6), dnf(day(2))]
         chart = stats_charts.render_attempt_chart(results, 6, day(1), day(2))
         top_row = chart.splitlines()[3]
-        self.assertEqual(top_row, "6 │ ▮ X")
+        self.assertEqual(top_row, "6 │ ▄ X")
 
     def test_all_missing_and_all_dnf_are_valid(self):
         all_missing = [missing(day(index)) for index in range(1, 4)]
@@ -376,23 +376,23 @@ class AttemptModelTests(unittest.TestCase):
             "TRIVMOUNT · 2026-11-09 to 2026-11-13\n"
             "Correct (higher = better)\n"
             "\n"
-            "12 │     X   ▮\n"
-            "11 │         ▮\n"
-            "10 │ ▮       ▮\n"
-            " 9 │ ▮       ▮\n"
-            " 8 │ ▮       ▮\n"
-            " 7 │ ▮       ▮\n"
-            " 6 │ ▮       ▮\n"
-            " 5 │ ▮       ▮\n"
-            " 4 │ ▮       ▮\n"
-            " 3 │ ▮       ▮\n"
-            " 2 │ ▮       ▮\n"
-            " 1 │ ▮       ▮\n"
+            "12 │     X   ▄\n"
+            "11 │         ▄\n"
+            "10 │ ▄       ▄\n"
+            " 9 │ ▄       ▄\n"
+            " 8 │ ▄       ▄\n"
+            " 7 │ ▄       ▄\n"
+            " 6 │ ▄       ▄\n"
+            " 5 │ ▄       ▄\n"
+            " 4 │ ▄       ▄\n"
+            " 3 │ ▄       ▄\n"
+            " 2 │ ▄       ▄\n"
+            " 1 │ ▄       ▄\n"
             " 0 │   0\n"
             "   └──────────\n"
             "    09      13\n"
             "\n"
-            "▮ = score · X = DNF · 0 = zero score · blank = no result"
+            "▄ = score · X = DNF · 0 = zero score · blank = no result"
         )
         self.assertEqual(actual, expected)
         self.assertEqual(
@@ -431,13 +431,36 @@ class AttemptModelTests(unittest.TestCase):
         lines = chart.splitlines()
         self.assertEqual(lines[0], "MAPTAP · 2026-11-09 to 2026-11-13")
         self.assertEqual(lines[3], "1000 │ █   X")
+        self.assertEqual(lines[4], " 900 │ █")
         self.assertEqual(lines[12], " 100 │ █       █")
-        self.assertEqual(lines[13], "   0 │   0")
-        self.assertIn("█ = score · X = DNF · 0 = zero score · blank = no result", chart)
+        self.assertEqual(lines[13], "     └──────────")
+        self.assertNotIn("   0 │", chart)
+        self.assertIn(
+            "█ = score · X = DNF · blank = no result or low/zero score",
+            chart,
+        )
         self.assertEqual(
             stats_charts.summarize_scaled_scores(results),
             "Played: 4/5 days\nAvg: 354 pts\nBest: 962 pts",
         )
+
+    def test_scaled_score_chart_uses_nearest_bucket_rounding(self):
+        results = [
+            scored(day(1), 49, None),
+            scored(day(2), 50, None),
+            scored(day(3), 149, None),
+            scored(day(4), 150, None),
+            scored(day(5), 932, None),
+        ]
+        chart = stats_charts.render_scaled_score_chart(
+            results, 1000, day(1), day(5), title="Maptap", unit="pts",
+        )
+        rows = chart.splitlines()
+        self.assertNotIn("█", rows[3])       # 932 rounds to 900, not 1000
+        self.assertEqual(rows[12], " 100 │   █ █ █ █")
+        self.assertEqual(rows[11], " 200 │       █ █")
+        self.assertEqual(rows[10], " 300 │         █")
+        self.assertEqual(rows[4], " 900 │         █")
 
     def test_stored_scores_map_to_score_chart_states(self):
         old_path, old_today, path = fresh_db("2026-11-18")

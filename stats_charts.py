@@ -19,9 +19,9 @@ AttemptStatus = Literal["solved", "dnf", "missing"]
 ScoreStatus = Literal["score", "dnf", "missing"]
 # Fixed calendar-day window for the personal game history chart.
 CHART_PERIOD_DAYS = 10
-# Vertical rectangles keep each stacked attempt visually distinct while
-# remaining compact enough for Discord's monospace code blocks.
-ATTEMPT_SYMBOL = "▮"
+# Half-height blocks stay aligned in Discord's monospace font while leaving a
+# visible seam between vertically stacked attempts.
+ATTEMPT_SYMBOL = "▄"
 SCORE_SYMBOL = "█"
 _ATTEMPT_DISPLAY = re.compile(r"^([1-9]\d*)\s*/\s*([1-9]\d*)")
 _DNF_DISPLAY = re.compile(r"^(?:dnf|x\s*/\s*([1-9]\d*))$", re.IGNORECASE)
@@ -488,7 +488,12 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
 def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: float | None,
                               start_date: date, end_date: date, *,
                               title: str = "Score history", unit: str = "pts") -> str:
-    """Render raw scores on a compact, dynamically scaled ten-row chart."""
+    """Render raw scores on a compact, dynamically scaled ten-row chart.
+
+    Scores are rounded to the nearest visual bucket. A score in the lower half
+    of the first bucket (for example 0–49 on a 0–1000 scale) has no bar, so a
+    valid zero looks quiet rather than being mistaken for a positive score.
+    """
     results = _validate_score_results(daily_results, start_date, end_date)
     chart_height = 10
     raw_max = max(
@@ -497,10 +502,11 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
         + [nominal_max or 0]
     )
     scale_max = _nice_ceiling(max(raw_max, 1.0))
+    bucket_width = scale_max / chart_height
     levels = {
-        id(result): 0 if result.status != "score" or not result.score else min(
+        id(result): 0 if result.status != "score" or result.score is None else min(
             chart_height,
-            max(1, math.ceil(result.score / scale_max * chart_height)),
+            math.floor(result.score / bucket_width + 0.5),
         )
         for result in results
     }
@@ -528,9 +534,6 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
             f"{_format_number(tick):>{axis_width}} │" + "".join(cells).rstrip()
         )
 
-    zero_cells = [" 0" if result.status == "score" and result.score == 0 else "  "
-                  for result in results]
-    lines.append(f"{'0':>{axis_width}} │" + "".join(zero_cells).rstrip())
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(results)))
     labels = [
         f"{result.date.day:02d}" if index % 4 == 0 else "  "
@@ -538,5 +541,7 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
     ]
     lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
     lines.append("")
-    lines.append(f"{SCORE_SYMBOL} = score · X = DNF · 0 = zero score · blank = no result")
+    lines.append(
+        f"{SCORE_SYMBOL} = score · X = DNF · blank = no result or low/zero score"
+    )
     return "\n".join(lines)
