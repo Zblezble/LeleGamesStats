@@ -23,7 +23,7 @@ import db
 import discord
 import games
 import stats_charts
-from stats_charts import DailyAttempt
+from stats_charts import DailyAttempt, DailyScore
 
 
 def day(offset_from_november=1, month=11, year=2026):
@@ -40,6 +40,18 @@ def dnf(day_value):
 
 def missing(day_value):
     return DailyAttempt(day_value, "missing", None)
+
+
+def scored(day_value, score, maximum=None):
+    return DailyScore(day_value, "score", score, maximum)
+
+
+def score_dnf(day_value):
+    return DailyScore(day_value, "dnf", None, None)
+
+
+def score_missing(day_value):
+    return DailyScore(day_value, "missing", None, None)
 
 
 def add_score(board_date, user_id, user_name, game, puzzle_id,
@@ -107,16 +119,16 @@ class AttemptModelTests(unittest.TestCase):
             "TEST · 2026-11-05 to 2026-11-09\n"
             "Guesses (lower = better)\n"
             "\n"
-            "6 │     X   ▄\n"
-            "5 │         ▄\n"
-            "4 │         ▄\n"
-            "3 │   ▄     ▄\n"
-            "2 │   ▄     ▄\n"
-            "1 │ ▄ ▄     ▄\n"
+            "6 │     X   ▮\n"
+            "5 │         ▮\n"
+            "4 │         ▮\n"
+            "3 │   ▮     ▮\n"
+            "2 │   ▮     ▮\n"
+            "1 │ ▮ ▮     ▮\n"
             "  └──────────\n"
             "   05      09\n"
             "\n"
-            "▄ = attempt · X = DNF · blank = no result"
+            "▮ = attempt · X = DNF · blank = no result"
         )
         self.assertEqual(actual, expected)
 
@@ -124,7 +136,7 @@ class AttemptModelTests(unittest.TestCase):
         results = [solved(day(1), 6), dnf(day(2))]
         chart = stats_charts.render_attempt_chart(results, 6, day(1), day(2))
         top_row = chart.splitlines()[3]
-        self.assertEqual(top_row, "6 │ ▄ X")
+        self.assertEqual(top_row, "6 │ ▮ X")
 
     def test_all_missing_and_all_dnf_are_valid(self):
         all_missing = [missing(day(index)) for index in range(1, 4)]
@@ -280,35 +292,242 @@ class AttemptModelTests(unittest.TestCase):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
-            add_score("2026-11-08", 1, "Alice", "Trivmount", "#2", 1, -100.0, "12/12")
+            add_score("2026-11-08", 1, "Alice", "Globle", "#2", 1, 5.0, "5 guesses")
             self.assertEqual(
                 stats_charts.resolve_chart_game(1, "Songless", day(5), day(9)),
                 (None, []),
             )
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Trivmount", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Globle", day(5), day(9)),
                 (None, []),
             )
         finally:
             cleanup(old_path, old_today, path)
 
-    def test_autocomplete_offers_only_fixed_attempt_games(self):
+    def test_autocomplete_offers_only_chartable_games(self):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
-            add_score("2026-11-08", 1, "Alice", "Trivmount", "#2", 1, -100.0, "12/12")
+            add_score("2026-11-08", 1, "Alice", "Globle", "#2", 1, 5.0, "5 guesses")
             choices = asyncio.run(commands._chart_game_autocomplete(None, ""))
             values = {choice.value for choice in choices}
             self.assertIn("Worldle", values)
             self.assertIn("Chessle", values)
+            self.assertIn("Trivmount", values)
+            self.assertIn("Maptap", values)
             self.assertNotIn("Songless", values)
-            self.assertNotIn("Trivmount", values)
+            self.assertNotIn("Globle", values)
         finally:
             cleanup(old_path, old_today, path)
 
     def test_wordle_is_chartable_even_when_disabled_for_ingest(self):
         self.assertEqual(games.fixed_attempt_family("Wordle"), "Wordle")
         self.assertEqual(stats_charts.max_attempts_for("Wordle"), 6)
+
+    def test_score_registry_and_metadata(self):
+        expected_renderers = {
+            "Trivmount": "fixed_score",
+            "History in Order": "fixed_score",
+            "Majority": "fixed_score",
+            "Songspot": "fixed_score",
+            "Centumth": "scaled_score",
+            "Magnitudle": "scaled_score",
+            "Maptap": "scaled_score",
+        }
+        self.assertEqual(
+            {name: meta["renderer"]
+             for name, meta in games.SCORE_CHART_GAMES.items()},
+            expected_renderers,
+        )
+        self.assertEqual(stats_charts.score_chart_meta("Trivmount")["max_score"], 12)
+        self.assertEqual(stats_charts.score_chart_meta("Maptap")["max_score"], None)
+        self.assertEqual(games.score_chart_family("Magnitudle (Size It Up)"), "Magnitudle")
+        self.assertIsNone(games.score_chart_family("Songless"))
+
+    def test_score_states_are_validated(self):
+        scored(day(1), 0, 12)
+        scored(day(1), 12, 12)
+        score_dnf(day(1))
+        score_missing(day(1))
+        for invalid in (
+            ("score", -1, 12),
+            ("score", 13, 12),
+            ("score", None, 12),
+            ("dnf", 3, None),
+            ("missing", 0, None),
+            ("invented", 3, None),
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    DailyScore(day(1), invalid[0], invalid[1], invalid[2])
+
+    def test_fixed_score_chart_boundaries_zero_and_missing(self):
+        results = [
+            scored(day(9), 10, 12),
+            scored(day(10), 0, 12),
+            score_dnf(day(11)),
+            score_missing(day(12)),
+            scored(day(13), 12, 12),
+        ]
+        actual = stats_charts.render_fixed_score_chart(
+            results, 12, day(9), day(13), title="Trivmount", unit="correct",
+        )
+        expected = (
+            "TRIVMOUNT · 2026-11-09 to 2026-11-13\n"
+            "Correct (higher = better)\n"
+            "\n"
+            "12 │     X   ▮\n"
+            "11 │         ▮\n"
+            "10 │ ▮       ▮\n"
+            " 9 │ ▮       ▮\n"
+            " 8 │ ▮       ▮\n"
+            " 7 │ ▮       ▮\n"
+            " 6 │ ▮       ▮\n"
+            " 5 │ ▮       ▮\n"
+            " 4 │ ▮       ▮\n"
+            " 3 │ ▮       ▮\n"
+            " 2 │ ▮       ▮\n"
+            " 1 │ ▮       ▮\n"
+            " 0 │   0\n"
+            "   └──────────\n"
+            "    09      13\n"
+            "\n"
+            "▮ = score · X = DNF · 0 = zero score · blank = no result"
+        )
+        self.assertEqual(actual, expected)
+        self.assertEqual(
+            stats_charts.summarize_fixed_scores(results, 12),
+            "Played: 4/5 days\nAvg: 7.3/12\nBest: 12/12\nPerfect: 1",
+        )
+
+    def test_fixed_score_chart_uses_variable_display_maximums(self):
+        results = [
+            scored(day(1), 6, 7),
+            scored(day(2), 8, 10),
+            score_missing(day(3)),
+        ]
+        chart = stats_charts.render_fixed_score_chart(
+            results, None, day(1), day(3), title="History", unit="correct",
+        )
+        self.assertIn("10 │", chart)
+        self.assertIn(" 8 │", chart)
+        self.assertNotIn("11 │", chart)
+        self.assertEqual(
+            stats_charts.summarize_fixed_scores(results),
+            "Played: 2/3 days\nAvg: 7.0/10\nBest: 8/10\nPerfect: 0",
+        )
+
+    def test_scaled_score_chart_scales_without_changing_raw_scores(self):
+        results = [
+            scored(day(9), 962, None),
+            scored(day(10), 0, None),
+            score_dnf(day(11)),
+            score_missing(day(12)),
+            scored(day(13), 100, None),
+        ]
+        chart = stats_charts.render_scaled_score_chart(
+            results, None, day(9), day(13), title="Maptap", unit="pts",
+        )
+        lines = chart.splitlines()
+        self.assertEqual(lines[0], "MAPTAP · 2026-11-09 to 2026-11-13")
+        self.assertEqual(lines[3], "1000 │ █   X")
+        self.assertEqual(lines[12], " 100 │ █       █")
+        self.assertEqual(lines[13], "   0 │   0")
+        self.assertIn("█ = score · X = DNF · 0 = zero score · blank = no result", chart)
+        self.assertEqual(
+            stats_charts.summarize_scaled_scores(results),
+            "Played: 4/5 days\nAvg: 354 pts\nBest: 962 pts",
+        )
+
+    def test_stored_scores_map_to_score_chart_states(self):
+        old_path, old_today, path = fresh_db("2026-11-18")
+        try:
+            add_score("2026-11-09", 1, "Alice", "Trivmount", "#1", 1, -91.6667, "11/12")
+            add_score("2026-11-10", 1, "Alice", "History in Order", "#2", 0, -8.0, "8/10")
+            add_score("2026-11-11", 1, "Alice", "Majority", "#3", 1, -252.0, "2/5 (52%)")
+            add_score("2026-11-12", 1, "Alice", "Songspot", "#4", 1, -79.999, "4/5 · 3,450 pts")
+            add_score("2026-11-13", 1, "Alice", "Centumth", "#5", 1, -217.0, "217/490")
+            add_score("2026-11-14", 1, "Alice", "Magnitudle (Size It Up)", "#6", 1, -230.0, "230/500")
+            add_score("2026-11-15", 1, "Alice", "Maptap", "#7", 1, 0.0, "0 pts")
+            add_score("2026-11-16", 1, "Alice", "Trivmount", "#8", 0, 10000.0, "DNF")
+            add_score("2026-11-17", 1, "Alice", "Trivmount", "#9", 1, -108.3333, "13/12")
+
+            self.assertEqual(
+                stats_charts.load_scores(1, "Trivmount", day(9), day(17)),
+                [
+                    scored(day(9), 11, 12),
+                    score_missing(day(10)),
+                    score_missing(day(11)),
+                    score_missing(day(12)),
+                    score_missing(day(13)),
+                    score_missing(day(14)),
+                    score_missing(day(15)),
+                    score_dnf(day(16)),
+                    score_missing(day(17)),
+                ],
+            )
+            self.assertEqual(
+                stats_charts.load_scores(1, "History in Order", day(10), day(10)),
+                [scored(day(10), 8, 10)],
+            )
+            self.assertEqual(
+                stats_charts.load_scores(1, "Majority", day(11), day(11)),
+                [scored(day(11), 2, 5)],
+            )
+            self.assertEqual(
+                stats_charts.load_scores(1, "Songspot", day(12), day(12)),
+                [scored(day(12), 4, 5)],
+            )
+            self.assertEqual(
+                stats_charts.load_scores(1, "Centumth", day(13), day(13)),
+                [scored(day(13), 217, 490)],
+            )
+            self.assertEqual(
+                stats_charts.load_scores(1, "Magnitudle (Size It Up)", day(14), day(14)),
+                [scored(day(14), 230, 500)],
+            )
+            self.assertEqual(
+                stats_charts.load_scores(1, "Maptap", day(15), day(15)),
+                [scored(day(15), 0, None)],
+            )
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_score_chart_command_is_private_and_uses_score_summary(self):
+        old_path, old_today, path = fresh_db("2026-11-18")
+        try:
+            add_score("2026-11-18", 1, "Alice", "Trivmount", "#1", 1, -100.0, "12/12")
+
+            class FakeResponse:
+                def __init__(self):
+                    self.calls = []
+
+                async def send_message(self, **kwargs):
+                    self.calls.append(kwargs)
+
+            class FakeInteraction:
+                def __init__(self):
+                    self.response = FakeResponse()
+
+            class FakeUser:
+                id = 1
+                display_name = "Alice"
+
+            interaction = cast(Any, FakeInteraction())
+            asyncio.run(commands._send_game_chart(
+                interaction, cast(Any, FakeUser()), "Trivmount"))
+            self.assertEqual(len(interaction.response.calls), 1)
+            self.assertTrue(interaction.response.calls[0]["ephemeral"])
+            embed = interaction.response.calls[0]["embed"]
+            self.assertEqual(embed.fields[1].value,
+                             "Played: 1/10 days\nAvg: 12.0/12\nBest: 12/12\nPerfect: 1")
+
+            public_interaction = cast(Any, FakeInteraction())
+            asyncio.run(commands._send_game_chart(
+                public_interaction, cast(Any, FakeUser()), "Trivmount", public=True))
+            self.assertFalse(public_interaction.response.calls[0]["ephemeral"])
+        finally:
+            cleanup(old_path, old_today, path)
 
     def test_all_time_stats_helper_preserves_existing_shape(self):
         old_path, old_today, path = fresh_db("2026-11-09")

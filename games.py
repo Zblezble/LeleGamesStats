@@ -69,6 +69,29 @@ def fixed_attempt_family(game_name: str) -> str | None:
     return None
 
 
+# Score-based history charts. ``max_score`` is the nominal maximum where one
+# exists; None means the native displayed denominator/score range can vary.
+SCORE_CHART_GAMES = {
+    "Trivmount": {"renderer": "fixed_score", "max_score": 12, "unit": "correct"},
+    "History in Order": {"renderer": "fixed_score", "max_score": None, "unit": "correct"},
+    "Majority": {"renderer": "fixed_score", "max_score": 5, "unit": "majorities"},
+    "Songspot": {"renderer": "fixed_score", "max_score": 5, "unit": "songs"},
+    "Centumth": {"renderer": "scaled_score", "max_score": 490, "unit": "pts"},
+    "Magnitudle": {"renderer": "scaled_score", "max_score": 500, "unit": "pts"},
+    "Maptap": {"renderer": "scaled_score", "max_score": None, "unit": "pts"},
+}
+
+
+def score_chart_family(game_name: str) -> str | None:
+    """Return the score-chart family for an exact game or meaningful submode."""
+    folded = (game_name or "").strip().casefold()
+    for family in SCORE_CHART_GAMES:
+        family_folded = family.casefold()
+        if folded == family_folded or folded.startswith(family_folded + " ("):
+            return family
+    return None
+
+
 def get_game_icon(game_name: str) -> str:
     return get_game_meta(game_name)["icon"]
 

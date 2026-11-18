@@ -16,7 +16,8 @@ from datetime import date, datetime, timedelta
 import csv
 
 from config import today_str
-from games import ACTIVE_GAME_META, FIXED_ATTEMPT_GAMES, fixed_attempt_family, get_game_icon
+from games import (ACTIVE_GAME_META, FIXED_ATTEMPT_GAMES, SCORE_CHART_GAMES,
+                   fixed_attempt_family, get_game_icon, score_chart_family)
 
 
 @app_commands.describe(
@@ -158,8 +159,10 @@ async def _chart_game_autocomplete(_interaction, current: str):
     """Offer supported fixed-attempt games plus variants already in history."""
     with sqlite3.connect(config.DB_PATH) as conn:
         stored = [row[0] for row in conn.execute("SELECT DISTINCT game FROM scores").fetchall()]
-    names = {name for name in stored if fixed_attempt_family(name)}
+    names = {name for name in stored
+             if fixed_attempt_family(name) or score_chart_family(name)}
     names.update(FIXED_ATTEMPT_GAMES)
+    names.update(SCORE_CHART_GAMES)
     matches = [name for name in sorted(names, key=str.casefold)
                if current.casefold() in name.casefold()]
     return [app_commands.Choice(name=name, value=name) for name in matches[:25]]
@@ -167,12 +170,12 @@ async def _chart_game_autocomplete(_interaction, current: str):
 
 async def _send_game_chart(interaction: discord.Interaction, target: discord.abc.User,
                            selected_game: str, *, public: bool = False):
-    """Resolve, render and send one user's fixed-attempt history chart."""
+    """Resolve, render and send one user's game history chart."""
     end = date.fromisoformat(today_str())
     start = end - timedelta(days=stats_charts.CHART_PERIOD_DAYS - 1)
-    if fixed_attempt_family(selected_game) is None:
+    if fixed_attempt_family(selected_game) is None and score_chart_family(selected_game) is None:
         await interaction.response.send_message(
-            f"**{selected_game}** doesn't have a fixed-attempt history chart yet.",
+            f"**{selected_game}** doesn't have a history chart yet.",
             ephemeral=True,
         )
         return
@@ -180,9 +183,11 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
     game, variants = stats_charts.resolve_chart_game(target.id, selected_game, start, end)
     if game is None:
         if variants:
+            family = (fixed_attempt_family(selected_game)
+                      or score_chart_family(selected_game))
             shown = ", ".join(f"`{name}`" for name in variants)
             await interaction.response.send_message(
-                f"Multiple **{fixed_attempt_family(selected_game)}** variants were played "
+                f"Multiple **{family}** variants were played "
                 f"in this period. Pick one: {shown}.",
                 ephemeral=True,
             )
@@ -194,19 +199,46 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
             )
         return
 
-    daily_results = stats_charts.load_attempts(target.id, game, start, end)
-    if not any(result.status != "missing" for result in daily_results):
-        await interaction.response.send_message(
-            f"No **{game}** results for {target.display_name} between "
-            f"{start.isoformat()} and {end.isoformat}.",
-            ephemeral=True,
+    if fixed_attempt_family(game) is not None:
+        daily_attempts = stats_charts.load_attempts(target.id, game, start, end)
+        if not any(result.status != "missing" for result in daily_attempts):
+            await interaction.response.send_message(
+                f"No **{game}** results for {target.display_name} between "
+                f"{start.isoformat()} and {end.isoformat}.",
+                ephemeral=True,
+            )
+            return
+        chart = stats_charts.render_attempt_chart(
+            daily_attempts, stats_charts.max_attempts_for(game), start, end, title=game,
         )
-        return
+        summary = stats_charts.summarize_attempts(daily_attempts)
+    else:
+        daily_scores = stats_charts.load_scores(target.id, game, start, end)
+        if not any(result.status != "missing" for result in daily_scores):
+            await interaction.response.send_message(
+                f"No **{game}** results for {target.display_name} between "
+                f"{start.isoformat()} and {end.isoformat}.",
+                ephemeral=True,
+            )
+            return
+        meta = stats_charts.score_chart_meta(game)
+        if meta["renderer"] == "fixed_score":
+            chart = stats_charts.render_fixed_score_chart(
+                daily_scores, meta["max_score"], start, end,
+                title=game, unit=meta["unit"],
+            )
+            summary = stats_charts.summarize_fixed_scores(
+                daily_scores, meta["max_score"],
+            )
+        else:
+            chart = stats_charts.render_scaled_score_chart(
+                daily_scores, meta["max_score"], start, end,
+                title=game, unit=meta["unit"],
+            )
+            summary = stats_charts.summarize_scaled_scores(
+                daily_scores, unit=meta["unit"],
+            )
 
-    max_attempts = stats_charts.max_attempts_for(game)
-    chart = stats_charts.render_attempt_chart(
-        daily_results, max_attempts, start, end, title=game,
-    )
     embed = discord.Embed(
         title=f"{get_game_icon(game)} {game} · {target.display_name}",
         color=0x64748B,
@@ -218,7 +250,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
     )
     embed.add_field(
         name="Summary",
-        value=stats_charts.summarize_attempts(daily_results),
+        value=summary,
         inline=False,
     )
     await interaction.response.send_message(embed=embed, ephemeral=not public)

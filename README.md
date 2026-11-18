@@ -16,7 +16,7 @@ A Discord bot that digests daily puzzle-game results posted in a channel into a 
 - Awards daily points per game (🥇 = 3 pts · 🥈 = 2 pts · 🥉 = 1 pt, ties share placement; games with ≥2 players) plus a standings summary on the board.
 - Slash commands:
   - `/h2h <opponent> [player1]` – head-to-head record across all shared puzzles.
-  - `/stats [player]` – all-time games played, solve rate, golds 🥇, personal bests, play streaks, and prison history.
+  - `/stats [game] [user] [public]` – all-time games played, solve rate, golds 🥇, personal bests, play streaks, and prison history; with `game`, shows a private 10-day fixed-attempt or score-history chart unless `public` is enabled.
   - `/week` – seven-day recap: group leaderboard, turnout, and game difficulty.
   - `/export [days]` – admin-only CSV export for the last N days (default 7, max 31), privately attached with formula-safe cells.
   - `/board` – re-posts today's board at the bottom of the channel.
@@ -67,6 +67,7 @@ games.py      → game registry (icons/links/descriptions), GRADED_GAMES, result
 db.py         → SQLite schema + ingest log
 parsers.py    → parse_all_games: one share-text -> result dicts (the file that grows per game)
 embeds.py     → daily board + /missing checklist builders
+stats_charts.py → reusable game-history models, loaders, and chart renderers
 handlers.py   → on_message ingest flow + daily board maintenance
 commands.py   → slash commands, attached via register(bot)
 test_parsers.py → fixture suite: python test_parsers.py (run it before/after parser changes)
