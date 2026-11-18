@@ -8,7 +8,8 @@ import discord
 
 import config
 import db
-from games import ACTIVE_GAME_META, DIFFICULTY_GAMES, game_available_on, get_game_icon, is_ranked_result
+import difficulty
+from games import ACTIVE_GAME_META, game_available_on, get_game_icon, is_ranked_result
 
 
 def _entries_by_game(board_date: str):
@@ -176,49 +177,98 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
     return embed
 
 
-def _is_score_ratio_game(game: str) -> bool:
-    """Games whose display numerator/denominator is directly comparable."""
-    return game in {
-        "Trivmount", "Thursday Thirty", "Songless", "Centumth", "Majority", "Songspot", "History in Order"
-    } or game.startswith("Magnitudle")
+# The historical percentile engine owns difficulty computation. This module only
+# renders its results and never re-derives a local native/normalized difficulty scale.
+_DIFFICULTY_NOTE = (
+    "Based on attempts before each puzzle's board date. "
+    "Higher = easier than usual for the group."
+)
 
 
-def _performance_fraction(game: str, solved: int, rank_score: float, display_score: str) -> float:
-    """Map one result to a roughly comparable 0..1 outcome strength, for daily difficulty.
-
-    Correct ratios ("18/30", "199/500") are used verbatim. Score-based percent
-    games follow their percentage. Other games rank by puzzle constraints:
-    first tries approach 1, guess counts reduce it. This is a heuristic for the
-    day's recap, not a universal measure of player skill.
-    """
-    dscore = (display_score or "").strip()
-    # Only genuine scoring games treat x/y as a score ratio. Wordle's 1/6 is a first try.
-    if _is_score_ratio_game(game):
-        ratio = re.match(r"(\d+)/([1-9]\d*)", dscore)
-        if ratio:
-            correct, total = int(ratio.group(1)), int(ratio.group(2))
-            return max(0.0, min(1.0, correct / total))
-    if not solved:
-        return 0.0
-    if game.startswith("Roughly"):
-        return max(0.0, min(1.0, -rank_score / 100))
-    if game == "Travle":
-        return 1 / max(1.0, 1 + rank_score)
-    if game in {"Metazooa", "Globle", "Redactle"}:
-        return 1 / max(1.0, abs(rank_score))
-    if game.startswith("Regionle"):
-        return max(0.0, min(1.0, (1 - (rank_score - 1) / 7)))
-    # Guess-type games: tries (and hint penalties) translate through a 6-point scale.
-    return max(0.0, min(1.0, (7 - rank_score) / 6))
+def _round_percentile(value: float) -> int:
+    """Display-only whole-number percentile, clamped to the historical 0-100 range."""
+    return max(0, min(100, int(float(value) + 0.5)))
 
 
-def _median(values: list[float]) -> float:
-    if not values:
-        return 0.0
-    mid = len(values) // 2
-    if len(values) % 2:
-        return values[mid]
-    return (values[mid - 1] + values[mid]) / 2
+def _ordinal(number: int) -> str:
+    """English ordinal suffix, including the 11th/12th/13th exceptions."""
+    if 10 <= number % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
+
+
+def _counted(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _difficulty_label(game: str, variant: str | None, puzzle_id: str | None = None) -> str:
+    """Concise game label; variant and puzzle id only when they add identity."""
+    label = f"{game} ({variant})" if variant else game
+    return f"{label} {puzzle_id}" if puzzle_id else label
+
+
+def _difficulty_line(label: str, percentile: float, count: int, noun: str) -> str:
+    return (
+        f"**{label}** · {_ordinal(_round_percentile(percentile))} percentile"
+        f" · {_counted(count, noun)}"
+    )
+
+
+def _daily_difficulty_text(results: list[dict]) -> str | None:
+    """One factual easiest/hardest pair from the engine's ordered daily results."""
+    if len(results) < 2:
+        return None
+    easiest, hardest = results[0], results[-1]
+    if easiest["percentile"] == hardest["percentile"]:
+        # No contrast to report: one percentile value is not an easiest/hardest pair.
+        return None
+
+    instances = {}
+    for item in results:
+        key = (item["game"], item.get("variant"))
+        instances[key] = instances.get(key, 0) + 1
+
+    def label(item: dict) -> str:
+        game, variant = item["game"], item.get("variant")
+        # A repeated game+variant needs its puzzle id to disambiguate the entry.
+        puzzle_id = item.get("puzzle_id") if instances[(game, variant)] > 1 else None
+        return _difficulty_label(game, variant, puzzle_id)
+
+    return "\n".join([
+        "Easiest: " + _difficulty_line(
+            label(easiest), easiest["percentile"], int(easiest.get("players", 0)), "player"
+        ),
+        "Hardest: " + _difficulty_line(
+            label(hardest), hardest["percentile"], int(hardest.get("players", 0)), "player"
+        ),
+        _DIFFICULTY_NOTE,
+    ])
+
+
+def _weekly_difficulty_text(results: list[dict]) -> str | None:
+    """One factual easiest/hardest pair from the engine's qualifying weekly variants."""
+    minimum = getattr(config, "DIFFICULTY_MIN_WEEKLY_PUZZLES", 2)
+    qualified = [item for item in results if int(item.get("instances", 0)) >= minimum]
+    if len(qualified) < 2:
+        return None
+    easiest, hardest = qualified[0], qualified[-1]
+    if easiest["percentile"] == hardest["percentile"]:
+        return None
+
+    def label(item: dict) -> str:
+        return _difficulty_label(item["game"], item.get("variant"))
+
+    return "\n".join([
+        "Easiest: " + _difficulty_line(
+            label(easiest), easiest["percentile"], int(easiest["instances"]), "puzzle"
+        ),
+        "Hardest: " + _difficulty_line(
+            label(hardest), hardest["percentile"], int(hardest["instances"]), "puzzle"
+        ),
+        _DIFFICULTY_NOTE,
+    ])
 
 
 def _prison_group(start_date: str, end_date: str):
@@ -232,59 +282,6 @@ def _prison_group(start_date: str, end_date: str):
         noun = "day" if days == 1 else "days"
         lines.append(f"{_name} · {days} {noun}")
     return label, "\n".join(lines)
-
-
-def _format_native_number(value: float) -> str:
-    """Keep native medians compact, allowing fractional values without trailing .0."""
-    rounded = round(value, 1)
-    return str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
-
-
-def _native_denominator(entries: list[tuple], score_ratio: bool) -> int | None:
-    """Infer a shared native denominator only from available rows in this puzzle group."""
-    pattern = r"(\d+)/([1-9]\d*)" if score_ratio else r"(?:\d+|X)/([1-9]\d*)"
-    group = 2 if score_ratio else 1
-    denominators = set()
-    for entry in entries:
-        match = re.match(pattern, (entry[4] or "").strip(), re.IGNORECASE)
-        if match:
-            denominators.add(int(match.group(group)))
-    return denominators.pop() if len(denominators) == 1 else None
-
-
-def _native_median(game: str, entries: list[tuple], score: float) -> str | None:
-    """Invert the selected normalized median into familiar units when that is unambiguous."""
-    if _is_score_ratio_game(game):
-        denominator = _native_denominator(entries, score_ratio=True)
-        if denominator is None:
-            return None
-        unit = " placements" if game == "History in Order" else ""
-        return f"{_format_native_number(score * denominator)}/{denominator}{unit}"
-
-    if game.startswith("Regionle"):
-        denominator = _native_denominator(entries, score_ratio=False)
-        guesses = 1 + (1 - score) * 7
-    elif game.split(" (", 1)[0] in {"Wordle", "Worldle", "Flagle", "Mathle", "Tradle", "Chessle"}:
-        denominator = _native_denominator(entries, score_ratio=False)
-        guesses = 7 - 6 * score
-    else:
-        # Excluded/open-ended games (including Maptap) have no guessed native maximum.
-        return None
-
-    if denominator is None:
-        return None
-    return f"{_format_native_number(guesses)}/{denominator} guesses"
-
-
-def _difficulty_summary(board_date: str, level: str, candidates: list[tuple]) -> str:
-    """Select a tied extremum as before, then report its factual native and normalized medians."""
-    game, score, entries = random.Random(f"{board_date}:{level}:game").choice(candidates)
-    label = "Easiest" if level == "easiest" else "Hardest"
-    summary = f"{label}: **{game}**"
-    native = _native_median(game, entries, score)
-    if native is not None:
-        summary += f" · median `{native}`"
-    return summary + f" · normalized `{score:.1%}`"
 
 
 def _wrap_comment(board_date: str, names: dict[int, str], standings: list[tuple[int, int]]) -> str:
@@ -423,31 +420,11 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
     if police is not None:
         embed.add_field(name=police[0], value=police[1], inline=False)
 
-    # Relative daily difficulty: median normalized result quality per game.
-    # Solve flags alone cannot distinguish an easy 5/6 day from a perfect first try.
-    rates = []
-    for (game, _pid), entries in grouped.items():
-        # A one-person game says nothing about relative daily difficulty, and
-        # incomparable score systems do not belong in a cross-game difficulty race.
-        if len(entries) < 2 or game.split(" (", 1)[0] not in DIFFICULTY_GAMES:
-            continue
-        outcomes = sorted(
-            _performance_fraction(game, solved, rscore, dscore)
-            for _uid, _uname, solved, rscore, dscore, _url in entries
-        )
-        rates.append((game, _median(outcomes), entries))
-    hits = [entry for entry in rates if entry[1] > 0]
-    if hits:
-        highest, lowest = max(r[1] for r in hits), min(r[1] for r in hits)
-        if highest != lowest:
-            easiest_games = [r for r in hits if r[1] == highest]
-            hardest_games = [r for r in hits if r[1] == lowest]
-            embed.add_field(
-                name="Game difficulty",
-                value=f"{_difficulty_summary(board_date, 'easiest', easiest_games)}\n"
-                      f"{_difficulty_summary(board_date, 'hardest', hardest_games)}",
-                inline=False,
-            )
+    # Historical difficulty compares each puzzle with the group's own pre-date results.
+    # The analysis engine owns eligibility, ordering and percentile math.
+    difficulty_text = _daily_difficulty_text(difficulty.analyze_day(board_date))
+    if difficulty_text:
+        _append_daily_fields(embed, [("Historical difficulty", difficulty_text, False)])
 
     standings = sorted(mvp_points.items(), key=lambda x: (-x[1], names.get(x[0], '')) if mvp_points else [])
     has_points_contest = len(players) > 1 and any(points > 0 for _uid, points in standings)
@@ -525,26 +502,11 @@ def build_weekly_embed(days: int = 7) -> discord.Embed | None:
     if police is not None:
         embed.add_field(name=police[0], value=police[1], inline=False)
 
-    # Same normalized, comparable-score handling as the daily wrap.
-    rates = []
-    for (game, _pid), entries in grouped.items():
-        if len(entries) < 2 or game.split(" (", 1)[0] not in DIFFICULTY_GAMES:
-            continue
-        results = sorted(_performance_fraction(game, solved, rscore, dscore)
-                         for _uid, _uname, solved, rscore, dscore, _url in entries)
-        rates.append((game, _median(results), entries))
-    meaningful = [entry for entry in rates if entry[1] > 0]
-    if meaningful:
-        high = max(r[1] for r in meaningful)
-        low = min(r[1] for r in meaningful)
-        if high != low:
-            embed.add_field(
-                name="Game difficulty",
-                value=_difficulty_summary(end_text, "easiest", [r for r in meaningful if r[1] == high])
-                      + "\n"
-                      + _difficulty_summary(end_text, "hardest", [r for r in meaningful if r[1] == low]),
-                inline=False,
-            )
+    # Historical weekly difficulty: each puzzle scored against its own earlier-date
+    # baseline, then averaged per game/variant. No local median or native guess scale.
+    weekly_difficulty = _weekly_difficulty_text(difficulty.analyze_week(end_text, days))
+    if weekly_difficulty:
+        embed.add_field(name="Historical difficulty", value=weekly_difficulty, inline=False)
 
     ordered = sorted(totals.items(), key=lambda kv: (-kv[1], names[kv[0]]))
     standings = " · ".join(f"{names[u]} `{p}`" for u, p in ordered) if ordered else "No podium points yet. See you tomorrow."

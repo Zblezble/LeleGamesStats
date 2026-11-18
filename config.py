@@ -33,6 +33,14 @@ DEBUG_LOG = "--debug" in sys.argv or bool(os.getenv("DEBUG_LOG"))
 # Set PRISON_ENABLED=1/true/yes/on to activate. Off by default as an easter egg.
 PRISON_ENABLED = os.getenv("PRISON_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
 
+# Historical difficulty analytics. These never alter game rank_score/podium points.
+DIFFICULTY_HISTORY_DAYS = 90
+DIFFICULTY_MIN_HISTORY_ATTEMPTS = 30
+DIFFICULTY_MIN_HISTORY_PUZZLES = 10
+DIFFICULTY_MIN_DAILY_PLAYERS = 2
+DIFFICULTY_SHRINKAGE_STRENGTH = 3
+DIFFICULTY_MIN_WEEKLY_PUZZLES = 2
+
 
 def today_str() -> str:
     now = datetime.now(BOT_TZ) if BOT_TZ else datetime.now()

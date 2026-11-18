@@ -282,86 +282,214 @@ def test_zero_point_player_in_a_real_contest_shows_zero_average():
         cleanup(old_path, old_prison, path)
 
 
-def test_difficulty_fields_show_native_daily_and_weekly_medians():
+def test_percentile_ordinals_and_display_rounding():
+    assert embeds._ordinal(11) == "11th"
+    assert embeds._ordinal(12) == "12th"
+    assert embeds._ordinal(13) == "13th"
+    assert embeds._ordinal(21) == "21st"
+    assert embeds._ordinal(22) == "22nd"
+    assert embeds._ordinal(23) == "23rd"
+    assert embeds._ordinal(101) == "101st"
+    assert embeds._round_percentile(78.4) == 78
+    assert embeds._round_percentile(23.6) == 24
+    assert embeds._round_percentile(-5) == 0
+    assert embeds._round_percentile(140) == 100
+
+
+def test_daily_difficulty_uses_ordered_historical_percentiles_and_players():
     old_path, old_prison, path = fresh_db()
-    old_today = config.today_str
     day = "2025-03-10"
-    config.today_str = lambda: "2025-03-11"
+    original_day = embeds.difficulty.analyze_day
+    calls = []
+
+    def fake_day(board_date):
+        calls.append(board_date)
+        return [
+            {"game": "Worldle", "variant": None, "puzzle_id": "#501",
+             "percentile": 78.4, "players": 3},
+            {"game": "Tradle", "variant": None, "puzzle_id": "#120",
+             "percentile": 41.2, "players": 2},
+            {"game": "Redactle", "variant": None, "puzzle_id": "#900",
+             "percentile": 23.6, "players": 5},
+        ]
+
     try:
-        # Wordle medians: (1 + 5/6) / 2 and (2/6 + 1/6) / 2.
         add_score(day, 1, "Alice", "#60", 1)
         add_score(day, 2, "Bob", "#60", 2)
-        add_score(day, 1, "Alice", "#61", 5)
-        add_score(day, 2, "Bob", "#61", 6)
-
-        daily = embeds.build_wrap_embed(day)
-        weekly = embeds.build_weekly_embed(days=7)
-        assert daily is not None and weekly is not None
-        expected = (
-            "Easiest: **Wordle** · median `1.5/6 guesses` · normalized `91.7%`\n"
-            "Hardest: **Wordle** · median `5.5/6 guesses` · normalized `25.0%`"
-        )
-        for verdict in (field(daily, "Game difficulty"), field(weekly, "Game difficulty")):
-            assert verdict == expected, verdict
-            assert len(verdict) <= 1024
-            for removed in (
-                "free points", "figured this one out", "confidence booster", "warm welcome",
-                "silence after the answers", "tiny derailment", "strengthen their stance", "lunch money",
-            ):
-                assert removed not in verdict
+        embeds.difficulty.analyze_day = fake_day
+        embed = embeds.build_wrap_embed(day)
+        assert embed is not None
+        assert calls == [day], calls
+        verdict = field(embed, "Historical difficulty")
+        assert verdict == (
+            "Easiest: **Worldle** · 78th percentile · 3 players\n"
+            "Hardest: **Redactle** · 24th percentile · 5 players\n"
+            + embeds._DIFFICULTY_NOTE
+        ), verdict
+        assert "%" not in verdict
+        assert "normalized" not in verdict and "median" not in verdict
+        # Points and placement presentation stay intact around the new field.
+        assert field(embed, "Final standings").startswith("Alice `3` pts")
+        assert embed.fields[-1].name == "\u200b"
     finally:
-        config.today_str = old_today
+        embeds.difficulty.analyze_day = original_day
         cleanup(old_path, old_prison, path)
 
 
-def test_native_difficulty_formats_score_ratios_placements_and_regionle():
-    def result(rank_score, display_score, solved=1):
-        return (1, "Player", solved, rank_score, display_score, None)
+def test_daily_difficulty_disambiguates_repeated_same_game_puzzles():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-03-14"
+    original_day = embeds.difficulty.analyze_day
 
-    wordle = [result(1, "1/6"), result(1, "1/6")]
-    assert embeds._native_median("Wordle", wordle, 1.0) == "1/6 guesses"
-    assert embeds._performance_fraction("Wordle", 1, 1, "1/6") > embeds._performance_fraction(
-        "Wordle", 1, 5, "5/6"
-    )  # Fewer guesses is better.
+    def fake_day(_board_date):
+        return [
+            {"game": "Redactle", "variant": None, "puzzle_id": "#2",
+             "percentile": 80.0, "players": 2},
+            {"game": "Redactle", "variant": None, "puzzle_id": "#1",
+             "percentile": 70.0, "players": 4},
+            {"game": "Wordle", "variant": None, "puzzle_id": "#d",
+             "percentile": 60.0, "players": 3},
+        ]
 
-    centumth = [result(-250, "250/490"), result(-250, "250/490")]
-    centumth_score = embeds._median([
-        embeds._performance_fraction("Centumth", 1, rank, display)
-        for _uid, _name, _solved, rank, display, _url in centumth
-    ])
-    assert embeds._performance_fraction("Centumth", 1, -250, "250/490") > embeds._performance_fraction(
-        "Centumth", 1, -100, "100/490"
-    )  # More correct answers is better, completely unlike guess-count ordering.
-    assert embeds._difficulty_summary(
-        "2025-03-14", "hardest", [("Centumth", centumth_score, centumth)]
-    ) == "Hardest: **Centumth** · median `250/490` · normalized `51.0%`"
-
-    history = [result(-4, "4/6", 0), result(-2, "2/6", 0)]
-    assert embeds._native_median("History in Order", history, 0.5) == "3/6 placements"
-
-    regionle = [result(3, "3/7"), result(5, "5/7")]
-    assert embeds._native_median("Regionle (US States)", regionle, 4 / 7) == "4/7 guesses"
-    assert embeds._difficulty_summary(
-        "2025-03-14", "easiest", [("Regionle (US States)", 4 / 7, regionle)]
-    ) == "Easiest: **Regionle (US States)** · median `4/7 guesses` · normalized `57.1%`"
-
-    maptap = [result(-1234, "1234"), result(-1234, "1234")]
-    assert embeds._native_median("Maptap", maptap, 0.75) is None
-    assert embeds._difficulty_summary(
-        "2025-03-14", "hardest", [("Maptap", 0.75, maptap)]
-    ) == "Hardest: **Maptap** · normalized `75.0%`"
-    assert embeds._native_median(
-        "Wordle", [result(1, "1/6"), result(1, "1/8")], 1.0
-    ) is None  # Mixed puzzle contexts are not safe to combine into a native fraction.
+    try:
+        add_score(day, 1, "Alice", "#70", 1)
+        add_score(day, 2, "Bob", "#70", 2)
+        embeds.difficulty.analyze_day = fake_day
+        embed = embeds.build_wrap_embed(day)
+        assert embed is not None
+        assert field(embed, "Historical difficulty") == (
+            "Easiest: **Redactle #2** · 80th percentile · 2 players\n"
+            "Hardest: **Wordle** · 60th percentile · 3 players\n"
+            + embeds._DIFFICULTY_NOTE
+        )
+    finally:
+        embeds.difficulty.analyze_day = original_day
+        cleanup(old_path, old_prison, path)
 
 
-def test_regionle_named_modes_use_the_regionle_scale():
-    expected = 1 - (4 - 1) / 7
-    base = embeds._performance_fraction("Regionle", 1, 4, "4/7")
-    named_mode = embeds._performance_fraction("Regionle (US States)", 1, 4, "4/7")
-    assert base == expected
-    assert named_mode == expected
-    assert named_mode != (7 - 4) / 6  # Not the generic six-try fallback.
+def test_daily_and_weekly_difficulty_omitted_without_eligible_comparisons():
+    old_path, old_prison, path = fresh_db()
+    old_today = config.today_str
+    day = "2025-03-10"
+    original_day = embeds.difficulty.analyze_day
+    original_week = embeds.difficulty.analyze_week
+    config.today_str = lambda: "2025-03-11"
+
+    def one_result(_board_date):
+        return [{"game": "Wordle", "variant": None, "puzzle_id": "#x",
+                 "percentile": 55.0, "players": 2}]
+
+    try:
+        add_score(day, 1, "Alice", "#61", 1)
+        add_score(day, 2, "Bob", "#61", 2)
+
+        embeds.difficulty.analyze_day = lambda _board_date: []
+        embeds.difficulty.analyze_week = lambda _end, _days=7: []
+        empty_day = embeds.build_wrap_embed(day)
+        empty_week = embeds.build_weekly_embed(days=7)
+        assert empty_day is not None and empty_week is not None
+        for embed in (empty_day, empty_week):
+            names = {item.name for item in embed.fields}
+            assert "Historical difficulty" not in names
+            assert "Game difficulty" not in names
+            assert not any("percentile" in (item.value or "") for item in embed.fields)
+            assert not any("normalized" in (item.value or "") for item in embed.fields)
+
+        # A lone eligible puzzle is not an easiest/hardest comparison, daily or weekly.
+        embeds.difficulty.analyze_day = one_result
+        embeds.difficulty.analyze_week = lambda _end, _days=7: [
+            {"game": "Wordle", "variant": None, "percentile": 55.0, "instances": 2}
+        ]
+        solo_day = embeds.build_wrap_embed(day)
+        solo_week = embeds.build_weekly_embed(days=7)
+        assert solo_day is not None and solo_week is not None
+        for embed in (solo_day, solo_week):
+            assert "Historical difficulty" not in {item.name for item in embed.fields}
+    finally:
+        config.today_str = old_today
+        embeds.difficulty.analyze_day = original_day
+        embeds.difficulty.analyze_week = original_week
+        cleanup(old_path, old_prison, path)
+
+
+def test_weekly_difficulty_uses_instances_and_delegates_days():
+    old_path, old_prison, path = fresh_db()
+    old_today = config.today_str
+    original_week = embeds.difficulty.analyze_week
+    config.today_str = lambda: "2025-03-11"
+    calls = []
+
+    def fake_week(end_date, days=7):
+        calls.append((end_date, days))
+        return [
+            {"game": "Chessle", "variant": "hard", "percentile": 71.2, "instances": 3},
+            {"game": "Tradle", "variant": None, "percentile": 55.0, "instances": 2},
+            {"game": "Worldle", "variant": None, "percentile": 33.4, "instances": 2},
+            # Rendering must not present unqualified variants even if supplied.
+            {"game": "Globle", "variant": None, "percentile": 5.0, "instances": 1},
+        ]
+
+    try:
+        add_score("2025-03-10", 1, "Alice", "#80", 1)
+        add_score("2025-03-10", 2, "Bob", "#80", 2)
+        embeds.difficulty.analyze_week = fake_week
+        embed = embeds.build_weekly_embed(days=5)
+        assert embed is not None
+        assert calls == [("2025-03-11", 5)], calls
+        verdict = field(embed, "Historical difficulty")
+        assert verdict == (
+            "Easiest: **Chessle (hard)** · 71st percentile · 3 puzzles\n"
+            "Hardest: **Worldle** · 33rd percentile · 2 puzzles\n"
+            + embeds._DIFFICULTY_NOTE
+        ), verdict
+        assert "Globle" not in verdict
+        assert "Tradle" not in verdict  # Only the two endpoints are rendered.
+        assert "%" not in verdict and "normalized" not in verdict
+
+        # Deterministic for unchanged engine output, without a second history query.
+        again = embeds.build_weekly_embed(days=5)
+        assert again is not None
+        assert field(again, "Historical difficulty") == verdict
+        assert field(again, "Weekly points") == field(embed, "Weekly points")
+    finally:
+        config.today_str = old_today
+        embeds.difficulty.analyze_week = original_week
+        cleanup(old_path, old_prison, path)
+
+
+def test_daily_difficulty_deterministic_returned_tie_order():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-03-15"
+    original_day = embeds.difficulty.analyze_day
+
+    def fake_day(_board_date):
+        # Producers sort by percentile DESC and then canonical identity.
+        return [
+            {"game": "Alpha", "variant": None, "puzzle_id": "#1",
+             "percentile": 60.0, "players": 2},
+            {"game": "Beta", "variant": None, "puzzle_id": "#2",
+             "percentile": 50.0, "players": 2},
+            {"game": "Gamma", "variant": None, "puzzle_id": "#3",
+             "percentile": 50.0, "players": 2},
+        ]
+
+    try:
+        add_score(day, 1, "Alice", "#90", 1)
+        add_score(day, 2, "Bob", "#90", 2)
+        embeds.difficulty.analyze_day = fake_day
+        first = embeds.build_wrap_embed(day)
+        second = embeds.build_wrap_embed(day)
+        assert first is not None and second is not None
+        verdict = field(first, "Historical difficulty")
+        assert verdict == (
+            "Easiest: **Alpha** · 60th percentile · 2 players\n"
+            "Hardest: **Gamma** · 50th percentile · 2 players\n"
+            + embeds._DIFFICULTY_NOTE
+        ), verdict
+        assert field(second, "Historical difficulty") == verdict
+    finally:
+        embeds.difficulty.analyze_day = original_day
+        cleanup(old_path, old_prison, path)
 
 
 def test_long_standings_partition_complete_player_lines():
@@ -587,9 +715,12 @@ if __name__ == "__main__":
     test_solo_and_multiplayer_no_point_days_are_quiet()
     test_all_zero_board_has_no_standings_or_roast()
     test_zero_point_player_in_a_real_contest_shows_zero_average()
-    test_difficulty_fields_show_native_daily_and_weekly_medians()
-    test_native_difficulty_formats_score_ratios_placements_and_regionle()
-    test_regionle_named_modes_use_the_regionle_scale()
+    test_percentile_ordinals_and_display_rounding()
+    test_daily_difficulty_uses_ordered_historical_percentiles_and_players()
+    test_daily_difficulty_disambiguates_repeated_same_game_puzzles()
+    test_daily_and_weekly_difficulty_omitted_without_eligible_comparisons()
+    test_weekly_difficulty_uses_instances_and_delegates_days()
+    test_daily_difficulty_deterministic_returned_tie_order()
     test_long_standings_partition_complete_player_lines()
     test_wrap_comment_is_deterministic_and_keeps_original_selection()
     test_wrap_comment_categories_expose_new_lines_and_single_german_variant()
