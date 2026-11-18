@@ -107,16 +107,16 @@ class AttemptModelTests(unittest.TestCase):
             "TEST · 2026-11-05 to 2026-11-09\n"
             "Guesses (lower = better)\n"
             "\n"
-            "6 │     X   █\n"
-            "5 │         █\n"
-            "4 │         █\n"
-            "3 │   █     █\n"
-            "2 │   █     █\n"
-            "1 │ █ █     █\n"
+            "6 │     X   ▄\n"
+            "5 │         ▄\n"
+            "4 │         ▄\n"
+            "3 │   ▄     ▄\n"
+            "2 │   ▄     ▄\n"
+            "1 │ ▄ ▄     ▄\n"
             "  └──────────\n"
             "   05      09\n"
             "\n"
-            "█ = attempt · X = DNF · blank = no result"
+            "▄ = attempt · X = DNF · blank = no result"
         )
         self.assertEqual(actual, expected)
 
@@ -124,13 +124,13 @@ class AttemptModelTests(unittest.TestCase):
         results = [solved(day(1), 6), dnf(day(2))]
         chart = stats_charts.render_attempt_chart(results, 6, day(1), day(2))
         top_row = chart.splitlines()[3]
-        self.assertEqual(top_row, "6 │ █ X")
+        self.assertEqual(top_row, "6 │ ▄ X")
 
     def test_all_missing_and_all_dnf_are_valid(self):
         all_missing = [missing(day(index)) for index in range(1, 4)]
         chart = stats_charts.render_attempt_chart(all_missing, 6, day(1), day(3))
         attempt_rows = chart.splitlines()[3:9]
-        self.assertTrue(all("█" not in row and " X" not in row for row in attempt_rows),
+        self.assertTrue(all(stats_charts.ATTEMPT_SYMBOL not in row and " X" not in row for row in attempt_rows),
                         attempt_rows)
         self.assertIn("blank = no result", chart)
         self.assertEqual(

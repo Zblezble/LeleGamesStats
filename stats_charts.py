@@ -17,6 +17,9 @@ import games
 AttemptStatus = Literal["solved", "dnf", "missing"]
 # Fixed calendar-day window for the personal game history chart.
 CHART_PERIOD_DAYS = 10
+# Half-height blocks stay aligned in code blocks while leaving a visible seam
+# between vertically stacked attempts, so 3/6 reads as three blocks.
+ATTEMPT_SYMBOL = "▄"
 _ATTEMPT_DISPLAY = re.compile(r"^([1-9]\d*)\s*/\s*([1-9]\d*)")
 _DNF_DISPLAY = re.compile(r"^(?:dnf|x\s*/\s*([1-9]\d*))$", re.IGNORECASE)
 
@@ -216,7 +219,7 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
         for result in normalized:
             if (result.status == "solved" and result.attempts is not None
                     and result.attempts >= attempt):
-                symbol = "█"
+                symbol = ATTEMPT_SYMBOL
             elif result.status == "dnf" and attempt == max_attempts:
                 symbol = "X"
             else:
@@ -231,5 +234,5 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
     ]
     lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
     lines.append("")
-    lines.append("█ = attempt · X = DNF · blank = no result")
+    lines.append(f"{ATTEMPT_SYMBOL} = attempt · X = DNF · blank = no result")
     return "\n".join(lines)
