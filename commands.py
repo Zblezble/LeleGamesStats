@@ -166,7 +166,7 @@ async def _chart_game_autocomplete(_interaction, current: str):
 
 
 async def _send_game_chart(interaction: discord.Interaction, target: discord.abc.User,
-                           selected_game: str, period: int):
+                           selected_game: str, period: int, *, public: bool = False):
     """Resolve, render and send one user's fixed-attempt history chart."""
     end = date.fromisoformat(today_str())
     start = end - timedelta(days=period - 1)
@@ -221,7 +221,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         value=stats_charts.summarize_attempts(daily_results),
         inline=False,
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=not public)
 
 
 @app_commands.describe(
@@ -229,21 +229,23 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
     period="Length of the game history (used only with game)",
     user="Defaults to you if omitted",
     player="Legacy alias for user",
+    public="Post the game chart publicly (default: private to you)",
 )
 @app_commands.choices(period=[
-    app_commands.Choice(name="Last 14 days", value=14),
-    app_commands.Choice(name="Last 30 days", value=30),
+    app_commands.Choice(name="Last 10 days", value=10),
+    app_commands.Choice(name="Last 20 days", value=20),
 ])
 @app_commands.autocomplete(game=_chart_game_autocomplete)
 async def stats(interaction: discord.Interaction,
                 game: str | None = None,
-                period: int = 14,
+                period: int = 10,
                 user: discord.Member | None = None,
-                player: discord.Member | None = None):
+                player: discord.Member | None = None,
+                public: bool = False):
     target = user or player or interaction.user
 
     if game:
-        await _send_game_chart(interaction, target, game, period)
+        await _send_game_chart(interaction, target, game, period, public=public)
         return
 
     embed = build_all_time_stats_embed(target.id, target.display_name)
@@ -473,7 +475,7 @@ async def layout_switch(interaction: discord.Interaction):
 
 def register(bot):
     bot.tree.command(name="h2h", description="Head-to-Head comparison between two players across all daily games")(h2h)
-    bot.tree.command(name="stats", description="View all-time crowns, podiums, and win rates")(stats)
+    bot.tree.command(name="stats", description="View all-time stats or a recent game history chart")(stats)
     bot.tree.command(name="board", description="Moves today's scoreboard to the bottom of the channel if chat buried it")(board)
     bot.tree.command(name="missing", description="Which of today's games you still have to play")(missing)
     bot.tree.command(name="undo", description="Remove the scores from your most recent post today")(undo)

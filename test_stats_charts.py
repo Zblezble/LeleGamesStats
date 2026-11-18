@@ -5,6 +5,7 @@ Run: python -X utf8 test_stats_charts.py   (exits 1 on failure)
 Renderer cases are pure; command-data cases use a throwaway SQLite file.
 """
 import asyncio
+import inspect
 import os
 import sqlite3
 import sys
@@ -325,8 +326,9 @@ class AttemptModelTests(unittest.TestCase):
             cleanup(old_path, old_today, path)
 
     def test_rendered_history_fits_discord_embed_limits(self):
-        results = [solved(day(index), (index % 6) + 1) for index in range(1, 31)]
-        chart = stats_charts.render_attempt_chart(results, 6, day(1), day(30))
+        results = [solved(day(index), (index % 6) + 1) for index in range(1, 21)]
+        chart = stats_charts.render_attempt_chart(results, 6, day(1), day(20))
+        self.assertLessEqual(max(len(line) for line in chart.splitlines()), 44)
         embed = discord.Embed(title="History")
         embed.add_field(name="Chart", value=f"```text\n{chart}\n```", inline=False)
         embed.add_field(
@@ -337,6 +339,54 @@ class AttemptModelTests(unittest.TestCase):
         self.assertLessEqual(len(embed), 6000)
         for field in embed.fields:
             self.assertLessEqual(len(field.value or ""), 1024)
+
+    def test_chart_periods_use_mobile_friendly_defaults(self):
+        signature = inspect.signature(commands.stats)
+        self.assertEqual(signature.parameters["period"].default, 10)
+        choices = cast(Any, commands.stats).__discord_app_commands_param_choices__.get("period", [])
+        self.assertEqual([choice.value for choice in choices], [10, 20])
+
+    def test_chart_is_private_by_default_and_public_on_request(self):
+        old_path, old_today, path = fresh_db("2026-11-18")
+        try:
+            add_score("2026-11-18", 1, "Alice", "Worldle", "#1", 1, 2.0, "2/6")
+
+            class FakeResponse:
+                def __init__(self):
+                    self.calls = []
+
+                async def send_message(self, **kwargs):
+                    self.calls.append(kwargs)
+
+            class FakeInteraction:
+                def __init__(self):
+                    self.response = FakeResponse()
+
+            class FakeUser:
+                id = 1
+                display_name = "Alice"
+
+            interaction = cast(Any, FakeInteraction())
+            asyncio.run(commands._send_game_chart(
+                interaction, cast(Any, FakeUser()), "Worldle", 10))
+            self.assertEqual(len(interaction.response.calls), 1)
+            self.assertTrue(interaction.response.calls[0]["ephemeral"])
+            self.assertEqual(
+                interaction.response.calls[0]["embed"].fields[0].name,
+                "Last 10 days",
+            )
+
+            public_interaction = cast(Any, FakeInteraction())
+            asyncio.run(commands._send_game_chart(
+                public_interaction, cast(Any, FakeUser()), "Worldle", 20, public=True))
+            self.assertEqual(len(public_interaction.response.calls), 1)
+            self.assertFalse(public_interaction.response.calls[0]["ephemeral"])
+            self.assertEqual(
+                public_interaction.response.calls[0]["embed"].fields[0].name,
+                "Last 20 days",
+            )
+        finally:
+            cleanup(old_path, old_today, path)
 
 
 if __name__ == "__main__":
