@@ -26,6 +26,7 @@ CHART_PERIOD_CHOICES = (10, 20)
 # visible seam between vertically stacked attempts.
 ATTEMPT_SYMBOL = "▄"
 ATTEMPT_COMPACT_SYMBOL = "■"
+DNF_COLUMN_SYMBOL = "│"
 SCORE_SYMBOL = "▉"
 SCORE_COMPACT_SYMBOL = "▌"
 _ATTEMPT_DISPLAY = re.compile(r"^([1-9]\d*)\s*/\s*([1-9]\d*)")
@@ -450,6 +451,7 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                          axis_label: str = "Guesses",
                          zero_is_best: bool = False,
                          show_hints: bool = False,
+                         fill_dnf_column: bool = False,
                          period: int = CHART_PERIOD_DAYS) -> str:
     """Render an aligned vertical Unicode bar chart in a code block."""
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
@@ -499,6 +501,8 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                 symbol = bar_symbol
             elif result.status == "dnf" and attempt == max_attempts:
                 symbol = "X"
+            elif result.status == "dnf" and fill_dnf_column:
+                symbol = DNF_COLUMN_SYMBOL
             elif hint_levels.get(offset) == attempt:
                 symbol = "?"
             else:

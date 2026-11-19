@@ -448,13 +448,16 @@ class AttemptModelTests(unittest.TestCase):
         chart = stats_charts.render_attempt_chart(
             results, 14, day(1), day(4), title="Travle",
             axis_label="Extra guesses", zero_is_best=True, show_hints=True,
+            fill_dnf_column=True,
         )
         lines = chart.splitlines()
         self.assertEqual(lines[0], "TRAVLE · 2026-11-01 to 2026-11-04")
         self.assertEqual(lines[3], "14 │     X")
-        self.assertEqual(lines[14], " 3 │   ?")
-        self.assertEqual(lines[15], " 2 │   ▄")
-        self.assertEqual(lines[17], " 0 │ ▄ ▄")
+        self.assertEqual(lines[4], "13 │     │")
+        self.assertEqual(lines[16], " 1 │   ▄ │")
+        self.assertEqual(lines[14], " 3 │   ? │")
+        self.assertEqual(lines[15], " 2 │   ▄ │")
+        self.assertEqual(lines[17], " 0 │ ▄ ▄ │")
 
         summary = stats_charts.summarize_attempts(results, unit="extra guesses")
         self.assertEqual(
