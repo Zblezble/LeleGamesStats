@@ -224,7 +224,7 @@ class DifficultyTests(unittest.TestCase):
                 text = "\n".join(field.value or "" for field in embed.fields)
                 self.assertIn("percentile", text)
                 self.assertIn("players", text)
-                self.assertIn("Based on attempts before each puzzle's board date.", text)
+                self.assertIn("Higher percentile = easier than usual for the group.", text)
 
 
 if __name__ == "__main__":

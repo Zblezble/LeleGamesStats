@@ -322,15 +322,44 @@ def test_daily_difficulty_uses_ordered_historical_percentiles_and_players():
         assert calls == [day], calls
         verdict = field(embed, "Historical difficulty")
         assert verdict == (
-            "Easiest: **Worldle** · 78th percentile · 3 players\n"
-            "Hardest: **Redactle** · 24th percentile · 5 players\n"
+            "Easiest: **Worldle** · `78th` percentile · `3` players\n"
+            "Hardest: **Redactle** · `24th` percentile · `5` players\n"
             + embeds._DIFFICULTY_NOTE
         ), verdict
         assert "%" not in verdict
-        assert "normalized" not in verdict and "median" not in verdict
+        assert "normalized" not in verdict
         # Points and placement presentation stay intact around the new field.
         assert field(embed, "Final standings").startswith("Alice `3` pts")
         assert embed.fields[-1].name == "\u200b"
+    finally:
+        embeds.difficulty.analyze_day = original_day
+        cleanup(old_path, old_prison, path)
+
+
+def test_daily_difficulty_shows_native_median_from_display_scores():
+    old_path, old_prison, path = fresh_db()
+    day = "2025-03-16"
+    original_day = embeds.difficulty.analyze_day
+
+    def fake_day(_board_date):
+        return [
+            {"game": "Wordle", "variant": None, "puzzle_id": "#70",
+             "percentile": 80.0, "players": 2},
+            {"game": "Tradle", "variant": None, "puzzle_id": "#71",
+             "percentile": 40.0, "players": 2},
+        ]
+
+    try:
+        add_score(day, 1, "Alice", "#70", 2)
+        add_score(day, 2, "Bob", "#70", 4)
+        embeds.difficulty.analyze_day = fake_day
+        embed = embeds.build_wrap_embed(day)
+        assert embed is not None
+        assert field(embed, "Historical difficulty") == (
+            "Easiest: **Wordle** · `80th` percentile · median `3/6` · `2` players\n"
+            "Hardest: **Tradle** · `40th` percentile · `2` players\n"
+            + embeds._DIFFICULTY_NOTE
+        ), field(embed, "Historical difficulty")
     finally:
         embeds.difficulty.analyze_day = original_day
         cleanup(old_path, old_prison, path)
@@ -358,8 +387,8 @@ def test_daily_difficulty_disambiguates_repeated_same_game_puzzles():
         embed = embeds.build_wrap_embed(day)
         assert embed is not None
         assert field(embed, "Historical difficulty") == (
-            "Easiest: **Redactle #2** · 80th percentile · 2 players\n"
-            "Hardest: **Wordle** · 60th percentile · 3 players\n"
+            "Easiest: **Redactle #2** · `80th` percentile · `2` players\n"
+            "Hardest: **Wordle** · `60th` percentile · `3` players\n"
             + embeds._DIFFICULTY_NOTE
         )
     finally:
@@ -438,8 +467,8 @@ def test_weekly_difficulty_uses_instances_and_delegates_days():
         assert calls == [("2025-03-11", 5)], calls
         verdict = field(embed, "Historical difficulty")
         assert verdict == (
-            "Easiest: **Chessle (hard)** · 71st percentile · 3 puzzles\n"
-            "Hardest: **Worldle** · 33rd percentile · 2 puzzles\n"
+            "Easiest: **Chessle (hard)** · `71st` percentile · `3` puzzles\n"
+            "Hardest: **Worldle** · `33rd` percentile · `2` puzzles\n"
             + embeds._DIFFICULTY_NOTE
         ), verdict
         assert "Globle" not in verdict
@@ -482,8 +511,8 @@ def test_daily_difficulty_deterministic_returned_tie_order():
         assert first is not None and second is not None
         verdict = field(first, "Historical difficulty")
         assert verdict == (
-            "Easiest: **Alpha** · 60th percentile · 2 players\n"
-            "Hardest: **Gamma** · 50th percentile · 2 players\n"
+            "Easiest: **Alpha** · `60th` percentile · `2` players\n"
+            "Hardest: **Gamma** · `50th` percentile · `2` players\n"
             + embeds._DIFFICULTY_NOTE
         ), verdict
         assert field(second, "Historical difficulty") == verdict
@@ -717,6 +746,7 @@ if __name__ == "__main__":
     test_zero_point_player_in_a_real_contest_shows_zero_average()
     test_percentile_ordinals_and_display_rounding()
     test_daily_difficulty_uses_ordered_historical_percentiles_and_players()
+    test_daily_difficulty_shows_native_median_from_display_scores()
     test_daily_difficulty_disambiguates_repeated_same_game_puzzles()
     test_daily_and_weekly_difficulty_omitted_without_eligible_comparisons()
     test_weekly_difficulty_uses_instances_and_delegates_days()

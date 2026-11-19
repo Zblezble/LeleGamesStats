@@ -2,6 +2,7 @@
 import random
 import re
 import sqlite3
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -10,6 +11,18 @@ import config
 import db
 import difficulty
 from games import ACTIVE_GAME_META, game_available_on, get_game_icon, is_ranked_result
+
+_RATIO_MEDIAN_GAMES = {
+    "Centumth", "History in Order", "Magnitudle", "Majority",
+    "Songless", "Songspot", "Thursday Thirty", "Trivmount",
+}
+_ATTEMPT_MEDIAN_GAMES = {
+    "Chessle", "Flagle", "Mathle", "Regionle", "Tradle", "Wordle", "Worldle",
+}
+_GUESS_COUNT_MEDIAN_GAMES = {"Globle", "Metazooa", "Redactle"}
+_RATIO_DISPLAY = re.compile(r"^\s*(\d+|X)\s*/\s*([1-9]\d*)", re.IGNORECASE)
+_GUESS_COUNT_DISPLAY = re.compile(r"(\d+)\s*(?:guesses|g)\b", re.IGNORECASE)
+_POINTS_DISPLAY = re.compile(r"^([\d,]+)\s*pts$", re.IGNORECASE)
 
 
 def _entries_by_game(board_date: str):
@@ -178,11 +191,86 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
 
 
 # The historical percentile engine owns difficulty computation. This module only
-# renders its results and never re-derives a local native/normalized difficulty scale.
-_DIFFICULTY_NOTE = (
-    "Based on attempts before each puzzle's board date. "
-    "Higher = easier than usual for the group."
-)
+# renders its results and never re-derives a local normalized difficulty scale.
+_DIFFICULTY_NOTE = "Higher percentile = easier than usual for the group."
+
+
+def _median(values: Sequence[float]) -> float:
+    """Arithmetic median; the caller supplies at least one finite value."""
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def _format_native_number(value: float) -> str:
+    """Keep native medians compact, allowing fractional values without trailing .0."""
+    rounded = round(value, 1)
+    return str(int(rounded)) if rounded.is_integer() else f"{rounded:.1f}"
+
+
+def _native_median(game: str, entries: list[tuple]) -> str | None:
+    """Return the day's median native score from readable display results.
+
+    This is presentation only: it does not feed the historical percentile,
+    leaderboard ordering, or points.
+    """
+    base_game = game.split(" (", 1)[0]
+    displays = [(entry[4] or "").strip() for entry in entries]
+    if base_game in _RATIO_MEDIAN_GAMES:
+        denominators = set()
+        numerators = []
+        for display in displays:
+            match = _RATIO_DISPLAY.match(display)
+            if not match or match.group(1).upper() == "X":
+                continue
+            numerators.append(int(match.group(1)))
+            denominators.add(int(match.group(2)))
+        if len(denominators) != 1 or not numerators:
+            return None
+        denominator = denominators.pop()
+        return f"{_format_native_number(_median(numerators))}/{denominator}"
+
+    if base_game in _ATTEMPT_MEDIAN_GAMES:
+        denominators = set()
+        attempts = []
+        for display in displays:
+            match = _RATIO_DISPLAY.match(display)
+            if not match:
+                continue
+            denominator = int(match.group(2))
+            if match.group(1).upper() == "X":
+                attempts.append(denominator + 1)
+            else:
+                attempts.append(int(match.group(1)))
+            denominators.add(denominator)
+        if len(denominators) != 1 or not attempts:
+            return None
+        denominator = denominators.pop()
+        median = _median(attempts)
+        if median > denominator:
+            return f"X/{denominator}"
+        return f"{_format_native_number(median)}/{denominator}"
+
+    if base_game in _GUESS_COUNT_MEDIAN_GAMES:
+        guesses = [int(match.group(1)) for display in displays
+                   if (match := _GUESS_COUNT_DISPLAY.search(display))]
+        if not guesses:
+            return None
+        return f"{_format_native_number(_median(guesses))} guesses"
+
+    if base_game == "Maptap":
+        points = []
+        for display in displays:
+            match = _POINTS_DISPLAY.match(display)
+            if match:
+                points.append(int(match.group(1).replace(",", "")))
+        if not points:
+            return None
+        return f"{int(_median(points)):,} pts"
+
+    return None
 
 
 def _round_percentile(value: float) -> int:
@@ -199,24 +287,26 @@ def _ordinal(number: int) -> str:
     return f"{number}{suffix}"
 
 
-def _counted(count: int, noun: str) -> str:
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
 def _difficulty_label(game: str, variant: str | None, puzzle_id: str | None = None) -> str:
     """Concise game label; variant and puzzle id only when they add identity."""
     label = f"{game} ({variant})" if variant else game
     return f"{label} {puzzle_id}" if puzzle_id else label
 
 
-def _difficulty_line(label: str, percentile: float, count: int, noun: str) -> str:
-    return (
-        f"**{label}** · {_ordinal(_round_percentile(percentile))} percentile"
-        f" · {_counted(count, noun)}"
-    )
+def _difficulty_line(label: str, percentile: float, count: int, noun: str,
+                     median: str | None = None) -> str:
+    parts = [
+        f"**{label}**",
+        f"`{_ordinal(_round_percentile(percentile))}` percentile",
+    ]
+    if median:
+        parts.append(f"median `{median}`")
+    noun_form = noun if count == 1 else f"{noun}s"
+    parts.append(f"`{count}` {noun_form}")
+    return " · ".join(parts)
 
 
-def _daily_difficulty_text(results: list[dict]) -> str | None:
+def _daily_difficulty_text(results: list[dict], board_date: str) -> str | None:
     """One factual easiest/hardest pair from the engine's ordered daily results."""
     if len(results) < 2:
         return None
@@ -225,6 +315,7 @@ def _daily_difficulty_text(results: list[dict]) -> str | None:
         # No contrast to report: one percentile value is not an easiest/hardest pair.
         return None
 
+    grouped = _entries_by_game(board_date)
     instances = {}
     for item in results:
         key = (item["game"], item.get("variant"))
@@ -236,12 +327,18 @@ def _daily_difficulty_text(results: list[dict]) -> str | None:
         puzzle_id = item.get("puzzle_id") if instances[(game, variant)] > 1 else None
         return _difficulty_label(game, variant, puzzle_id)
 
+    def native_median(item: dict) -> str | None:
+        entries = grouped.get((item["game"], item.get("puzzle_id")), [])
+        return _native_median(item["game"], entries)
+
     return "\n".join([
         "Easiest: " + _difficulty_line(
-            label(easiest), easiest["percentile"], int(easiest.get("players", 0)), "player"
+            label(easiest), easiest["percentile"], int(easiest.get("players", 0)),
+            "player", native_median(easiest),
         ),
         "Hardest: " + _difficulty_line(
-            label(hardest), hardest["percentile"], int(hardest.get("players", 0)), "player"
+            label(hardest), hardest["percentile"], int(hardest.get("players", 0)),
+            "player", native_median(hardest),
         ),
         _DIFFICULTY_NOTE,
     ])
@@ -422,7 +519,9 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
 
     # Historical difficulty compares each puzzle with the group's own pre-date results.
     # The analysis engine owns eligibility, ordering and percentile math.
-    difficulty_text = _daily_difficulty_text(difficulty.analyze_day(board_date))
+    difficulty_text = _daily_difficulty_text(
+        difficulty.analyze_day(board_date), board_date
+    )
     if difficulty_text:
         _append_daily_fields(embed, [("Historical difficulty", difficulty_text, False)])
 
