@@ -237,7 +237,8 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         meta = stats_charts.guess_chart_meta(game)
         chart = stats_charts.render_scaled_guess_chart(
             daily_guesses, meta["default_max"], start, end,
-            title=game, unit=meta["unit"], period=period,
+            title=game, unit=meta["unit"],
+            max_attempts=meta.get("max_attempts"), period=period,
         )
         summary = stats_charts.summarize_attempts(
             daily_guesses, unit=meta["unit"],

@@ -372,16 +372,19 @@ def load_scores(user_id: int, game_name: str,
 
 def _guess_from_row(day: date, solved: object, display_score: str | None,
                     game_name: str) -> DailyAttempt | None:
-    """Convert one stored Globle-style result into an open-ended attempt state."""
+    """Convert one stored open-ended result into an attempt state."""
     if solved not in (0, 1) or isinstance(solved, bool):
         return None
-    guess_chart_meta(game_name)
+    meta = guess_chart_meta(game_name)
+    max_attempts = meta.get("max_attempts")
     display = (display_score or "").strip()
     if _DNF_DISPLAY.match(display):
         return DailyAttempt(day, "dnf", None) if solved == 0 else None
     match = _GUESS_COUNT.match(display)
-    if match and solved == 1 and int(match.group(1)) >= 1:
-        return DailyAttempt(day, "solved", int(match.group(1)))
+    if match and solved == 1:
+        attempts = int(match.group(1))
+        if attempts >= 1 and (max_attempts is None or attempts <= max_attempts):
+            return DailyAttempt(day, "solved", attempts)
     return None
 
 
@@ -518,6 +521,7 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
 def render_scaled_guess_chart(daily_results: list[DailyAttempt], default_max: int,
                               start_date: date, end_date: date, *,
                               title: str = "Guess history", unit: str = "guesses",
+                              max_attempts: int | None = None,
                               period: int = CHART_PERIOD_DAYS) -> str:
     """Render open-ended guess counts with a scalable lower-is-better axis."""
     if isinstance(default_max, bool) or not isinstance(default_max, int) or default_max < 1:
@@ -540,6 +544,8 @@ def render_scaled_guess_chart(daily_results: list[DailyAttempt], default_max: in
 
     counts = [result.attempts for result in normalized
               if result.status == "solved" and result.attempts is not None]
+    if max_attempts is not None and any(count > max_attempts for count in counts):
+        raise ValueError("A solved guess count exceeds the game's fixed maximum.")
     chart_max = max([default_max, *counts])
     axis_width = len(str(chart_max))
     bar_symbol, cell_width = chart_layout(

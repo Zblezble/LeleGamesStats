@@ -104,6 +104,11 @@ def score_chart_family(game_name: str) -> str | None:
 # the chart scales up to the largest valid guess count in the period.
 GUESS_CHART_GAMES = {
     "Globle": {"renderer": "scaled_guess", "default_max": 10, "unit": "guesses"},
+    # Metazooa's stumped shares are DNF; valid solved runs use 1-20 guesses.
+    "Metazooa": {
+        "renderer": "scaled_guess", "default_max": 10, "max_attempts": 20,
+        "unit": "guesses",
+    },
 }
 
 

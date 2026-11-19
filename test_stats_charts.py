@@ -306,13 +306,13 @@ class AttemptModelTests(unittest.TestCase):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
-            add_score("2026-11-08", 1, "Alice", "Metazooa", "#2", 1, 9.0, "9 guesses")
+            add_score("2026-11-08", 1, "Alice", "Redactle", "#2", 1, 18.0, "18g")
             self.assertEqual(
                 stats_charts.resolve_chart_game(1, "Songless", day(5), day(9)),
                 (None, []),
             )
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Metazooa", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Redactle", day(5), day(9)),
                 (None, []),
             )
         finally:
@@ -332,8 +332,9 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("Maptap", values)
             self.assertIn("Globle", values)
             self.assertIn("Travle", values)
+            self.assertIn("Metazooa", values)
             self.assertNotIn("Songless", values)
-            self.assertNotIn("Metazooa", values)
+            self.assertNotIn("Redactle", values)
             self.assertNotIn("Chessle (Medium)", values)
             self.assertNotIn("Magnitudle (Size It Up)", values)
         finally:
@@ -357,12 +358,20 @@ class AttemptModelTests(unittest.TestCase):
     def test_guess_registry_and_metadata(self):
         self.assertEqual(
             games.GUESS_CHART_GAMES,
-            {"Globle": {
-                "renderer": "scaled_guess", "default_max": 10, "unit": "guesses",
-            }},
+            {
+                "Globle": {
+                    "renderer": "scaled_guess", "default_max": 10, "unit": "guesses",
+                },
+                "Metazooa": {
+                    "renderer": "scaled_guess", "default_max": 10,
+                    "max_attempts": 20, "unit": "guesses",
+                },
+            },
         )
         self.assertEqual(games.guess_chart_family("Globle"), "Globle")
+        self.assertEqual(games.guess_chart_family("Metazooa"), "Metazooa")
         self.assertEqual(stats_charts.guess_chart_meta("Globle")["default_max"], 10)
+        self.assertEqual(stats_charts.guess_chart_meta("Metazooa")["max_attempts"], 20)
         self.assertIsNone(games.guess_chart_family("Travle"))
 
     def test_scaled_guess_chart_defaults_to_ten_and_scales_up(self):
@@ -465,6 +474,34 @@ class AttemptModelTests(unittest.TestCase):
             "Played: 3/4 days\nSolved: 2/3 (67%)\nAvg: 1.0 extra guesses\n"
             "Best: 0 extra guesses",
         )
+
+    def test_metazooa_rows_use_twenty_guess_limit(self):
+        old_path, old_today, path = fresh_db("2026-11-13")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Metazooa", "#1", 1, 1.0, "1 guesses")
+            add_score("2026-11-09", 1, "Alice", "Metazooa", "#2", 1, 20.0, "20 guesses")
+            add_score("2026-11-10", 1, "Alice", "Metazooa", "#3", 0, 999.0, "DNF")
+            add_score("2026-11-11", 1, "Alice", "Metazooa", "#4", 1, 21.0, "21 guesses")
+            results = stats_charts.load_guesses(1, "Metazooa", day(8), day(11))
+            self.assertEqual(results, [
+                solved(day(8), 1),
+                solved(day(9), 20),
+                dnf(day(10)),
+                missing(day(11)),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Metazooa", day(8), day(10))
+            self.assertEqual((resolved, variants), ("Metazooa", []))
+
+            chart = stats_charts.render_scaled_guess_chart(
+                results, 10, day(8), day(11), title="Metazooa", max_attempts=20,
+            )
+            self.assertIn("20 │   ▄ X", chart)
+            self.assertIn("10 │   ▄", chart)
+            self.assertIn(" 1 │ ▄ ▄", chart)
+            self.assertNotIn("21 │", chart)
+        finally:
+            cleanup(old_path, old_today, path)
 
     def test_score_registry_and_metadata(self):
         expected_renderers = {
