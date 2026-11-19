@@ -126,9 +126,7 @@ class AttemptModelTests(unittest.TestCase):
             "2 │   ▄     ▄\n"
             "1 │ ▄ ▄     ▄\n"
             "  └──────────\n"
-            "   05      09\n"
-            "\n"
-            "▄ = attempt · X = DNF · blank = no result"
+            "   05      09"
         )
         self.assertEqual(actual, expected)
 
@@ -144,7 +142,6 @@ class AttemptModelTests(unittest.TestCase):
         attempt_rows = chart.splitlines()[3:9]
         self.assertTrue(all(stats_charts.ATTEMPT_SYMBOL not in row and " X" not in row for row in attempt_rows),
                         attempt_rows)
-        self.assertIn("blank = no result", chart)
         self.assertEqual(
             stats_charts.summarize_attempts(all_missing),
             "Played: 0/3 days\nSolved: 0/0 (—)\nAvg: —\nBest: —",
@@ -417,9 +414,7 @@ class AttemptModelTests(unittest.TestCase):
             " 2 │ ▄       ▄\n"
             " 1 │ ▄       ▄\n"
             "   └──────────\n"
-            "    09      13\n"
-            "\n"
-            "▄ = score · X = DNF · blank = no result or zero score"
+            "    09      13"
         )
         self.assertEqual(actual, expected)
         self.assertEqual(
@@ -457,15 +452,11 @@ class AttemptModelTests(unittest.TestCase):
         )
         lines = chart.splitlines()
         self.assertEqual(lines[0], "MAPTAP · 2026-11-09 to 2026-11-13")
-        self.assertEqual(lines[3], "1000 │ █   X")
-        self.assertEqual(lines[4], " 900 │ █")
-        self.assertEqual(lines[12], " 100 │ █       █")
+        self.assertEqual(lines[3], "1000 │ ▉   X")
+        self.assertEqual(lines[4], " 900 │ ▉")
+        self.assertEqual(lines[12], " 100 │ ▉       ▉")
         self.assertEqual(lines[13], "     └──────────")
         self.assertNotIn("   0 │", chart)
-        self.assertIn(
-            "█ = score · X = DNF · blank = no result or low/zero score",
-            chart,
-        )
         self.assertEqual(
             stats_charts.summarize_scaled_scores(results),
             "Played: 4/5 days\nAvg: 354 pts\nBest: 962 pts",
@@ -483,11 +474,11 @@ class AttemptModelTests(unittest.TestCase):
             results, 1000, day(1), day(5), title="Maptap", unit="pts",
         )
         rows = chart.splitlines()
-        self.assertNotIn("█", rows[3])       # 932 rounds to 900, not 1000
-        self.assertEqual(rows[12], " 100 │   █ █ █ █")
-        self.assertEqual(rows[11], " 200 │       █ █")
-        self.assertEqual(rows[10], " 300 │         █")
-        self.assertEqual(rows[4], " 900 │         █")
+        self.assertNotIn(stats_charts.SCORE_SYMBOL, rows[3])       # 932 rounds to 900, not 1000
+        self.assertEqual(rows[12], " 100 │   ▉ ▉ ▉ ▉")
+        self.assertEqual(rows[11], " 200 │       ▉ ▉")
+        self.assertEqual(rows[10], " 300 │         ▉")
+        self.assertEqual(rows[4], " 900 │         ▉")
 
     def test_stored_scores_map_to_score_chart_states(self):
         old_path, old_today, path = fresh_db("2026-11-18")
@@ -644,14 +635,16 @@ class AttemptModelTests(unittest.TestCase):
             max(len(row) for row in spaced_rows),
             max(len(row) for row in compact_rows),
         )
-        self.assertTrue(all("▌" in row for row in compact_rows))
-        self.assertIn("▌" * 20, compact)
+        self.assertTrue(all(stats_charts.ATTEMPT_COMPACT_SYMBOL in row for row in compact_rows))
+        self.assertIn(stats_charts.ATTEMPT_COMPACT_SYMBOL * 20, compact)
+        self.assertIn("   01      09      17", compact)
 
         scaled = stats_charts.render_scaled_score_chart(
             [scored(day(index), 500, 1000) for index in range(1, 21)],
             1000, day(1), day(20), period=20,
         )
-        self.assertIn("▌" * 20, scaled)
+        self.assertIn(stats_charts.SCORE_COMPACT_SYMBOL * 20, scaled)
+        self.assertIn("   01      09      17", scaled)
 
     def test_chart_is_private_by_default_and_public_on_request(self):
         old_path, old_today, path = fresh_db("2026-11-18")

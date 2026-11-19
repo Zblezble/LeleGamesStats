@@ -25,8 +25,9 @@ CHART_PERIOD_CHOICES = (10, 20)
 # Half-height blocks stay aligned in Discord's monospace font while leaving a
 # visible seam between vertically stacked attempts.
 ATTEMPT_SYMBOL = "▄"
-COMPACT_SYMBOL = "▌"
-SCORE_SYMBOL = "█"
+ATTEMPT_COMPACT_SYMBOL = "■"
+SCORE_SYMBOL = "▉"
+SCORE_COMPACT_SYMBOL = "▌"
 _ATTEMPT_DISPLAY = re.compile(r"^([1-9]\d*)\s*/\s*([1-9]\d*)")
 _DNF_DISPLAY = re.compile(r"^(?:dnf|x\s*/\s*([1-9]\d*))$", re.IGNORECASE)
 _NUMBER_TEXT = r"\d[\d,]*"
@@ -104,6 +105,34 @@ def chart_layout(period: int, *, spaced_symbol: str,
     if period == CHART_PERIOD_CHOICES[-1]:
         return compact_symbol, 1
     raise ValueError("Chart period must be 10 or 20 days.")
+
+
+def date_label_interval(cell_width: int) -> int:
+    """Keep compact and spaced charts at the same visual label spacing."""
+    if cell_width == 1:
+        return 8
+    if cell_width == 2:
+        return 4
+    raise ValueError("Chart cells must be one or two characters wide.")
+
+
+def _date_labels(results: list, cell_width: int) -> str:
+    """Build date labels aligned to compact or spaced chart cells."""
+    interval = date_label_interval(cell_width)
+    labels = [" " * cell_width for _ in results]
+    for index, result in enumerate(results):
+        if index % interval:
+            continue
+        label = f"{result.date.day:02d}"
+        if cell_width == 1:
+            # A two-digit date spans two compact cells; start it at the tick.
+            if index + 1 < len(labels):
+                labels[index], labels[index + 1] = label
+            else:
+                labels[index - 1], labels[index] = label
+        else:
+            labels[index] = label
+    return "".join(labels)
 
 
 def score_chart_meta(game_name: str) -> dict:
@@ -344,7 +373,8 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
 
     axis_width = len(str(max_attempts))
     bar_symbol, cell_width = chart_layout(
-        period, spaced_symbol=ATTEMPT_SYMBOL, compact_symbol=COMPACT_SYMBOL,
+        period, spaced_symbol=ATTEMPT_SYMBOL,
+        compact_symbol=ATTEMPT_COMPACT_SYMBOL,
     )
     lines = [
         f"{title.upper()} · {start.isoformat()} to {end.isoformat()}",
@@ -366,13 +396,7 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
         lines.append((f"{attempt:>{axis_width}} │" + "".join(cells)).rstrip())
 
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(normalized)))
-    labels = [
-        f"{result.date.day:02d}" if index % 4 == 0 else "  "
-        for index, result in enumerate(normalized)
-    ]
-    lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
-    lines.append("")
-    lines.append(f"{bar_symbol} = attempt · X = DNF · blank = no result")
+    lines.append(" " * (axis_width + 2) + _date_labels(normalized, cell_width))
     return "\n".join(lines)
 
 
@@ -473,7 +497,8 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
 
     axis_width = len(str(chart_max))
     bar_symbol, cell_width = chart_layout(
-        period, spaced_symbol=ATTEMPT_SYMBOL, compact_symbol=COMPACT_SYMBOL,
+        period, spaced_symbol=ATTEMPT_SYMBOL,
+        compact_symbol=ATTEMPT_COMPACT_SYMBOL,
     )
     lines = [
         f"{title.upper()} · {start_date.isoformat()} to {end_date.isoformat()}",
@@ -495,15 +520,7 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
         lines.append((f"{level:>{axis_width}} │" + "".join(cells)).rstrip())
 
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(results)))
-    labels = [
-        f"{result.date.day:02d}" if index % 4 == 0 else "  "
-        for index, result in enumerate(results)
-    ]
-    lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
-    lines.append("")
-    lines.append(
-        f"{bar_symbol} = score · X = DNF · blank = no result or zero score"
-    )
+    lines.append(" " * (axis_width + 2) + _date_labels(results, cell_width))
     return "\n".join(lines)
 
 
@@ -536,7 +553,8 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
 
     axis_width = len(_format_number(scale_max))
     bar_symbol, cell_width = chart_layout(
-        period, spaced_symbol=SCORE_SYMBOL, compact_symbol=COMPACT_SYMBOL,
+        period, spaced_symbol=SCORE_SYMBOL,
+        compact_symbol=SCORE_COMPACT_SYMBOL,
     )
     lines = [
         f"{title.upper()} · {start_date.isoformat()} to {end_date.isoformat()}",
@@ -560,13 +578,5 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
         )
 
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(results)))
-    labels = [
-        f"{result.date.day:02d}" if index % 4 == 0 else "  "
-        for index, result in enumerate(results)
-    ]
-    lines.append((" " * (axis_width + 2) + "".join(labels)).rstrip())
-    lines.append("")
-    lines.append(
-        f"{bar_symbol} = score · X = DNF · blank = no result or low/zero score"
-    )
+    lines.append(" " * (axis_width + 2) + _date_labels(results, cell_width))
     return "\n".join(lines)
