@@ -98,6 +98,23 @@ def score_chart_family(game_name: str) -> str | None:
     return None
 
 
+# Open-ended guess-count charts. ``default_max`` is the minimum Y-axis height;
+# the chart scales up to the largest valid guess count in the period.
+GUESS_CHART_GAMES = {
+    "Globle": {"renderer": "scaled_guess", "default_max": 10, "unit": "guesses"},
+}
+
+
+def guess_chart_family(game_name: str) -> str | None:
+    """Return the guess-chart family for an exact game or meaningful submode."""
+    folded = (game_name or "").strip().casefold()
+    for family in GUESS_CHART_GAMES:
+        family_folded = family.casefold()
+        if folded == family_folded or folded.startswith(family_folded + " ("):
+            return family
+    return None
+
+
 # Selection stays at the family level, while these chart families read their
 # one actively played native variant.
 CHART_PREFERRED_VARIANTS = {

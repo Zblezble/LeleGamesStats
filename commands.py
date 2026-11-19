@@ -16,9 +16,9 @@ from datetime import date, datetime, timedelta
 import csv
 
 from config import today_str
-from games import (ACTIVE_GAME_META, FIXED_ATTEMPT_GAMES, SCORE_CHART_GAMES,
-                   fixed_attempt_family, get_game_icon, is_game_enabled,
-                   score_chart_family)
+from games import (ACTIVE_GAME_META, FIXED_ATTEMPT_GAMES, GUESS_CHART_GAMES,
+                   SCORE_CHART_GAMES, fixed_attempt_family, get_game_icon,
+                   guess_chart_family, is_game_enabled, score_chart_family)
 
 
 @app_commands.describe(
@@ -160,6 +160,7 @@ async def _chart_game_autocomplete(_interaction, current: str):
     """Offer supported chart families; variants are resolved from history."""
     names = {name for name in FIXED_ATTEMPT_GAMES if is_game_enabled(name)}
     names.update(name for name in SCORE_CHART_GAMES if is_game_enabled(name))
+    names.update(name for name in GUESS_CHART_GAMES if is_game_enabled(name))
     matches = [name for name in sorted(names, key=str.casefold)
                if current.casefold() in name.casefold()]
     return [app_commands.Choice(name=name, value=name) for name in matches[:25]]
@@ -172,7 +173,9 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
     """Resolve, render and send one user's game history chart."""
     end = date.fromisoformat(today_str())
     start = end - timedelta(days=period - 1)
-    if fixed_attempt_family(selected_game) is None and score_chart_family(selected_game) is None:
+    if (fixed_attempt_family(selected_game) is None
+            and score_chart_family(selected_game) is None
+            and guess_chart_family(selected_game) is None):
         await interaction.response.send_message(
             f"**{selected_game}** doesn't have a history chart yet.",
             ephemeral=True,
@@ -183,7 +186,8 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
     if game is None:
         if variants:
             family = (fixed_attempt_family(selected_game)
-                      or score_chart_family(selected_game))
+                      or score_chart_family(selected_game)
+                      or guess_chart_family(selected_game))
             shown = ", ".join(f"`{name}`" for name in variants)
             await interaction.response.send_message(
                 f"Multiple **{family}** variants were played "
@@ -212,6 +216,24 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
             title=game, period=period,
         )
         summary = stats_charts.summarize_attempts(daily_attempts)
+    elif guess_chart_family(game) is not None:
+        daily_guesses = stats_charts.load_guesses(target.id, game, start, end)
+        if not any(result.status != "missing" for result in daily_guesses):
+            await interaction.response.send_message(
+                f"No **{game}** results for {target.display_name} between "
+                f"{start.isoformat()} and {end.isoformat}.",
+                ephemeral=True,
+            )
+            return
+        meta = stats_charts.guess_chart_meta(game)
+        chart = stats_charts.render_scaled_guess_chart(
+            daily_guesses, meta["default_max"], start, end,
+            title=game, unit=meta["unit"], period=period,
+        )
+        summary = stats_charts.summarize_attempts(
+            daily_guesses, unit=meta["unit"],
+            singular=meta["unit"].removesuffix("es"),
+        )
     else:
         daily_scores = stats_charts.load_scores(target.id, game, start, end)
         if not any(result.status != "missing" for result in daily_scores):

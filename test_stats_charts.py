@@ -303,13 +303,13 @@ class AttemptModelTests(unittest.TestCase):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
-            add_score("2026-11-08", 1, "Alice", "Globle", "#2", 1, 5.0, "5 guesses")
+            add_score("2026-11-08", 1, "Alice", "Travle", "#2", 1, 2.0, "+2")
             self.assertEqual(
                 stats_charts.resolve_chart_game(1, "Songless", day(5), day(9)),
                 (None, []),
             )
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Globle", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Travle", day(5), day(9)),
                 (None, []),
             )
         finally:
@@ -327,8 +327,9 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("Magnitudle", values)
             self.assertIn("Trivmount", values)
             self.assertIn("Maptap", values)
+            self.assertIn("Globle", values)
             self.assertNotIn("Songless", values)
-            self.assertNotIn("Globle", values)
+            self.assertNotIn("Travle", values)
             self.assertNotIn("Chessle (Medium)", values)
             self.assertNotIn("Magnitudle (Size It Up)", values)
         finally:
@@ -348,6 +349,68 @@ class AttemptModelTests(unittest.TestCase):
     def test_wordle_chart_metadata_remains_available_when_disabled(self):
         self.assertEqual(games.fixed_attempt_family("Wordle"), "Wordle")
         self.assertEqual(stats_charts.max_attempts_for("Wordle"), 6)
+
+    def test_guess_registry_and_metadata(self):
+        self.assertEqual(
+            games.GUESS_CHART_GAMES,
+            {"Globle": {
+                "renderer": "scaled_guess", "default_max": 10, "unit": "guesses",
+            }},
+        )
+        self.assertEqual(games.guess_chart_family("Globle"), "Globle")
+        self.assertEqual(stats_charts.guess_chart_meta("Globle")["default_max"], 10)
+        self.assertIsNone(games.guess_chart_family("Travle"))
+
+    def test_scaled_guess_chart_defaults_to_ten_and_scales_up(self):
+        results = [
+            solved(day(1), 5),
+            solved(day(2), 10),
+            dnf(day(3)),
+            missing(day(4)),
+        ]
+        chart = stats_charts.render_scaled_guess_chart(
+            results, 10, day(1), day(4), title="Globle",
+        )
+        lines = chart.splitlines()
+        self.assertEqual(lines[0], "GLOBLE · 2026-11-01 to 2026-11-04")
+        self.assertEqual(lines[3], "10 │   ▄ X")
+        self.assertEqual(lines[8], " 5 │ ▄ ▄")
+        self.assertEqual(lines[6], " 7 │   ▄")
+        self.assertNotIn(" 0 │", chart)
+
+        dynamic = stats_charts.render_scaled_guess_chart(
+            [solved(day(1), 17), solved(day(2), 5)],
+            10, day(1), day(2), title="Globle",
+        )
+        self.assertIn("17 │ ▄", dynamic)
+        self.assertIn(" 5 │ ▄ ▄", dynamic)
+        self.assertNotIn("18 │", dynamic)
+
+    def test_globle_rows_map_to_guess_chart_states(self):
+        old_path, old_today, path = fresh_db("2026-11-09")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Globle", "#1", 1, 5.0, "5 guesses")
+            add_score("2026-11-09", 1, "Alice", "Globle", "#2", 0, 999.0, "DNF")
+            add_score("2026-11-10", 1, "Alice", "Globle", "#3", 1, 99.0, "bad")
+            results = stats_charts.load_guesses(1, "Globle", day(8), day(10))
+            self.assertEqual(results, [
+                solved(day(8), 5),
+                dnf(day(9)),
+                missing(day(10)),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Globle", day(8), day(9))
+            self.assertEqual((resolved, variants), ("Globle", []))
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_twenty_day_globle_chart_uses_compact_guess_blocks(self):
+        results = [solved(day(index), 4) for index in range(1, 21)]
+        chart = stats_charts.render_scaled_guess_chart(
+            results, 10, day(1), day(20), period=20, title="Globle",
+        )
+        self.assertIn(stats_charts.ATTEMPT_COMPACT_SYMBOL * 20, chart)
+        self.assertIn("   01      09      17", chart)
 
     def test_score_registry_and_metadata(self):
         expected_renderers = {

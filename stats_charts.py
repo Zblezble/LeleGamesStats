@@ -33,6 +33,7 @@ _DNF_DISPLAY = re.compile(r"^(?:dnf|x\s*/\s*([1-9]\d*))$", re.IGNORECASE)
 _NUMBER_TEXT = r"\d[\d,]*"
 _SCORE_RATIO = re.compile(rf"^({_NUMBER_TEXT})\s*/\s*({_NUMBER_TEXT})")
 _SCORE_POINTS = re.compile(rf"^({_NUMBER_TEXT})\s*pts$", re.IGNORECASE)
+_GUESS_COUNT = re.compile(r"^(\d+)\s+guesses$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,14 @@ def score_chart_meta(game_name: str) -> dict:
     return games.SCORE_CHART_GAMES[family]
 
 
+def guess_chart_meta(game_name: str) -> dict:
+    """Return renderer/unit metadata for a supported open-ended guess game."""
+    family = games.guess_chart_family(game_name)
+    if family is None:
+        raise ValueError(f"Unsupported guess-history game: {game_name!r}")
+    return games.GUESS_CHART_GAMES[family]
+
+
 def resolve_chart_game(user_id: int, selected_game: str,
                        start_date: date, end_date: date) -> tuple[str | None, list[str]]:
     """Resolve a chart game for one user and period.
@@ -152,7 +161,8 @@ def resolve_chart_game(user_id: int, selected_game: str,
     can ask for an exact variant instead of silently mixing them.
     """
     family = (games.fixed_attempt_family(selected_game)
-              or games.score_chart_family(selected_game))
+              or games.score_chart_family(selected_game)
+              or games.guess_chart_family(selected_game))
     if family is None:
         return None, []
 
@@ -166,7 +176,8 @@ def resolve_chart_game(user_id: int, selected_game: str,
     candidates = sorted({
         row[0] for row in rows
         if row[0] and (games.fixed_attempt_family(row[0]) == family
-                       or games.score_chart_family(row[0]) == family)
+                       or games.score_chart_family(row[0]) == family
+                       or games.guess_chart_family(row[0]) == family)
     })
     exact = [name for name in candidates if name.casefold() == selected]
     if exact:
@@ -322,6 +333,59 @@ def load_scores(user_id: int, game_name: str,
     ]
 
 
+def _guess_from_row(day: date, solved: object, display_score: str | None,
+                    game_name: str) -> DailyAttempt | None:
+    """Convert one stored Globle-style result into an open-ended attempt state."""
+    if solved not in (0, 1) or isinstance(solved, bool):
+        return None
+    guess_chart_meta(game_name)
+    display = (display_score or "").strip()
+    if _DNF_DISPLAY.match(display):
+        return DailyAttempt(day, "dnf", None) if solved == 0 else None
+    match = _GUESS_COUNT.match(display)
+    if match and solved == 1 and int(match.group(1)) >= 1:
+        return DailyAttempt(day, "solved", int(match.group(1)))
+    return None
+
+
+def load_guesses(user_id: int, game_name: str,
+                 start_date: date, end_date: date) -> list[DailyAttempt]:
+    """Load one user's latest valid guess count per day for an exact game name."""
+    start = _as_date(start_date)
+    end = _as_date(end_date)
+    if end < start:
+        raise ValueError("The chart end date must not precede its start date.")
+    guess_chart_meta(game_name)
+
+    with sqlite3.connect(config.DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT board_date, solved, display_score"
+            " FROM scores WHERE user_id = ? AND game = ? COLLATE NOCASE"
+            " AND board_date BETWEEN ? AND ?"
+            " ORDER BY board_date ASC, timestamp DESC, id DESC",
+            (user_id, game_name, start.isoformat(), end.isoformat()),
+        ).fetchall()
+
+    by_day: dict[date, DailyAttempt] = {}
+    for board_date, solved, display_score in rows:
+        try:
+            day = date.fromisoformat(board_date)
+        except (TypeError, ValueError):
+            continue
+        if not start <= day <= end:
+            continue
+        attempt = _guess_from_row(day, solved, display_score, game_name)
+        if attempt is not None:
+            # Rows are newest-first, so the first valid row wins deterministically.
+            by_day.setdefault(day, attempt)
+
+    return [
+        by_day.get(start + timedelta(days=offset),
+                   DailyAttempt(start + timedelta(days=offset), "missing", None))
+        for offset in range((end - start).days + 1)
+    ]
+
+
 def summarize_attempts(daily_results: list[DailyAttempt], *,
                        unit: str = "guesses", singular: str = "guess") -> str:
     """Return compact played/solved/average/best lines for the chart period."""
@@ -394,6 +458,61 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                 symbol = " "
             cells.append(symbol.rjust(cell_width))
         lines.append((f"{attempt:>{axis_width}} │" + "".join(cells)).rstrip())
+
+    lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(normalized)))
+    lines.append(" " * (axis_width + 2) + _date_labels(normalized, cell_width))
+    return "\n".join(lines)
+
+
+def render_scaled_guess_chart(daily_results: list[DailyAttempt], default_max: int,
+                              start_date: date, end_date: date, *,
+                              title: str = "Guess history", unit: str = "guesses",
+                              period: int = CHART_PERIOD_DAYS) -> str:
+    """Render open-ended guess counts with a scalable lower-is-better axis."""
+    if isinstance(default_max, bool) or not isinstance(default_max, int) or default_max < 1:
+        raise ValueError("default_max must be a positive integer.")
+    start = _as_date(start_date)
+    end = _as_date(end_date)
+    expected_days = (end - start).days + 1
+    if end < start or len(daily_results) != expected_days:
+        raise ValueError("daily_results must cover the inclusive date range exactly.")
+
+    normalized: list[DailyAttempt] = []
+    for offset, result in enumerate(daily_results):
+        if not isinstance(result, DailyAttempt):
+            raise TypeError(f"Expected DailyAttempt, got {type(result).__name__}")
+        if _as_date(result.date) != start + timedelta(days=offset):
+            raise ValueError("daily_results must be in chronological day order.")
+        if result.status == "solved" and result.attempts is None:
+            raise ValueError("A solved guess day requires an attempt count.")
+        normalized.append(result)
+
+    counts = [result.attempts for result in normalized
+              if result.status == "solved" and result.attempts is not None]
+    chart_max = max([default_max, *counts])
+    axis_width = len(str(chart_max))
+    bar_symbol, cell_width = chart_layout(
+        period, spaced_symbol=ATTEMPT_SYMBOL,
+        compact_symbol=ATTEMPT_COMPACT_SYMBOL,
+    )
+    lines = [
+        f"{title.upper()} · {start.isoformat()} to {end.isoformat()}",
+        f"{unit.capitalize()} (lower = better)",
+        "",
+    ]
+
+    for level in range(chart_max, 0, -1):
+        cells = []
+        for result in normalized:
+            if (result.status == "solved" and result.attempts is not None
+                    and result.attempts >= level):
+                symbol = bar_symbol
+            elif result.status == "dnf" and level == chart_max:
+                symbol = "X"
+            else:
+                symbol = " "
+            cells.append(symbol.rjust(cell_width))
+        lines.append((f"{level:>{axis_width}} │" + "".join(cells)).rstrip())
 
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(normalized)))
     lines.append(" " * (axis_width + 2) + _date_labels(normalized, cell_width))
