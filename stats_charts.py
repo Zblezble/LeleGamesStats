@@ -454,7 +454,6 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                          axis_label: str = "Guesses",
                          zero_is_best: bool = False,
                          show_hints: bool = False,
-                         fill_dnf_column: bool = False,
                          period: int = CHART_PERIOD_DAYS) -> str:
     """Render an aligned vertical Unicode bar chart in a code block."""
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
@@ -504,7 +503,7 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                 symbol = bar_symbol
             elif result.status == "dnf" and attempt == max_attempts:
                 symbol = "X"
-            elif result.status == "dnf" and fill_dnf_column:
+            elif result.status == "dnf":
                 symbol = DNF_COLUMN_SYMBOL
             elif hint_levels.get(offset) == attempt:
                 symbol = "?"
@@ -566,6 +565,8 @@ def render_scaled_guess_chart(daily_results: list[DailyAttempt], default_max: in
                 symbol = bar_symbol
             elif result.status == "dnf" and level == chart_max:
                 symbol = "X"
+            elif result.status == "dnf":
+                symbol = DNF_COLUMN_SYMBOL
             else:
                 symbol = " "
             cells.append(symbol.rjust(cell_width))
@@ -690,6 +691,8 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
                 symbol = bar_symbol
             elif result.status == "dnf" and level == chart_max:
                 symbol = "X"
+            elif result.status == "dnf":
+                symbol = DNF_COLUMN_SYMBOL
             else:
                 symbol = " "
             cells.append(symbol.rjust(cell_width))
@@ -746,6 +749,8 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
                 symbol = bar_symbol
             elif result.status == "dnf" and level == chart_height:
                 symbol = "X"
+            elif result.status == "dnf":
+                symbol = DNF_COLUMN_SYMBOL
             else:
                 symbol = " "
             cells.append(symbol.rjust(cell_width))

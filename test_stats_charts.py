@@ -119,11 +119,11 @@ class AttemptModelTests(unittest.TestCase):
             "Guesses (lower = better)\n"
             "\n"
             "6 │     X   ▄\n"
-            "5 │         ▄\n"
-            "4 │         ▄\n"
-            "3 │   ▄     ▄\n"
-            "2 │   ▄     ▄\n"
-            "1 │ ▄ ▄     ▄\n"
+            "5 │     │   ▄\n"
+            "4 │     │   ▄\n"
+            "3 │   ▄ │   ▄\n"
+            "2 │   ▄ │   ▄\n"
+            "1 │ ▄ ▄ │   ▄\n"
             "  └──────────\n"
             "   05      09"
         )
@@ -149,6 +149,7 @@ class AttemptModelTests(unittest.TestCase):
         all_dnf = [dnf(day(index)) for index in range(1, 4)]
         chart = stats_charts.render_attempt_chart(all_dnf, 6, day(1), day(3))
         self.assertEqual(chart.splitlines()[3], "6 │ X X X")
+        self.assertEqual(chart.splitlines()[4], "5 │ │ │ │")
         self.assertEqual(
             stats_charts.summarize_attempts(all_dnf),
             "Played: 3/3 days\nSolved: 0/3 (0%)\nAvg: —\nBest: —",
@@ -387,8 +388,8 @@ class AttemptModelTests(unittest.TestCase):
         lines = chart.splitlines()
         self.assertEqual(lines[0], "GLOBLE · 2026-11-01 to 2026-11-04")
         self.assertEqual(lines[3], "10 │   ▄ X")
-        self.assertEqual(lines[8], " 5 │ ▄ ▄")
-        self.assertEqual(lines[6], " 7 │   ▄")
+        self.assertEqual(lines[8], " 5 │ ▄ ▄ │")
+        self.assertEqual(lines[6], " 7 │   ▄ │")
         self.assertNotIn(" 0 │", chart)
 
         dynamic = stats_charts.render_scaled_guess_chart(
@@ -457,7 +458,6 @@ class AttemptModelTests(unittest.TestCase):
         chart = stats_charts.render_attempt_chart(
             results, 14, day(1), day(4), title="Travle",
             axis_label="Extra guesses", zero_is_best=True, show_hints=True,
-            fill_dnf_column=True,
         )
         lines = chart.splitlines()
         self.assertEqual(lines[0], "TRAVLE · 2026-11-01 to 2026-11-04")
@@ -556,17 +556,17 @@ class AttemptModelTests(unittest.TestCase):
             "Correct (higher = better)\n"
             "\n"
             "12 │     X   ▄\n"
-            "11 │         ▄\n"
-            "10 │ ▄       ▄\n"
-            " 9 │ ▄       ▄\n"
-            " 8 │ ▄       ▄\n"
-            " 7 │ ▄       ▄\n"
-            " 6 │ ▄       ▄\n"
-            " 5 │ ▄       ▄\n"
-            " 4 │ ▄       ▄\n"
-            " 3 │ ▄       ▄\n"
-            " 2 │ ▄       ▄\n"
-            " 1 │ ▄       ▄\n"
+            "11 │     │   ▄\n"
+            "10 │ ▄   │   ▄\n"
+            " 9 │ ▄   │   ▄\n"
+            " 8 │ ▄   │   ▄\n"
+            " 7 │ ▄   │   ▄\n"
+            " 6 │ ▄   │   ▄\n"
+            " 5 │ ▄   │   ▄\n"
+            " 4 │ ▄   │   ▄\n"
+            " 3 │ ▄   │   ▄\n"
+            " 2 │ ▄   │   ▄\n"
+            " 1 │ ▄   │   ▄\n"
             "   └──────────\n"
             "    09      13"
         )
@@ -607,8 +607,8 @@ class AttemptModelTests(unittest.TestCase):
         lines = chart.splitlines()
         self.assertEqual(lines[0], "MAPTAP · 2026-11-09 to 2026-11-13")
         self.assertEqual(lines[3], "1000 │ ▉   X")
-        self.assertEqual(lines[4], " 900 │ ▉")
-        self.assertEqual(lines[12], " 100 │ ▉       ▉")
+        self.assertEqual(lines[4], " 900 │ ▉   │")
+        self.assertEqual(lines[12], " 100 │ ▉   │   ▉")
         self.assertEqual(lines[13], "     └──────────")
         self.assertNotIn("   0 │", chart)
         self.assertEqual(

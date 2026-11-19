@@ -218,7 +218,6 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
             axis_label="Extra guesses" if meta.get("zero_is_best") else "Guesses",
             zero_is_best=bool(meta.get("zero_is_best")),
             show_hints=bool(meta.get("zero_is_best")),
-            fill_dnf_column=bool(meta.get("dnf_column")),
             period=period,
         )
         summary = stats_charts.summarize_attempts(
