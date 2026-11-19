@@ -34,24 +34,33 @@ _NUMBER_TEXT = r"\d[\d,]*"
 _SCORE_RATIO = re.compile(rf"^({_NUMBER_TEXT})\s*/\s*({_NUMBER_TEXT})")
 _SCORE_POINTS = re.compile(rf"^({_NUMBER_TEXT})\s*pts$", re.IGNORECASE)
 _GUESS_COUNT = re.compile(r"^(\d+)\s+guesses$", re.IGNORECASE)
+_TRAVEL_SCORE = re.compile(r"^\s*([+-]?\d+)(?:\s*\(([^)]*)\))?")
+_TRAVEL_HINT = re.compile(r"(?:^|\s)(?:(\d+)\s*(?:rady?|hints?)|\?)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
 class DailyAttempt:
-    """One canonical day state for a fixed-attempt game."""
+    """One canonical day state for a fixed-attempt game.
+
+    ``attempts=0`` is valid for zero-extra-guess games such as Travle. ``hinted``
+    is presentation-only metadata and never changes stored rank scores.
+    """
 
     date: date
     status: AttemptStatus
     attempts: int | None = None
+    hinted: bool = False
 
     def __post_init__(self):
         if self.status not in ("solved", "dnf", "missing"):
             raise ValueError(f"Unsupported attempt status: {self.status!r}")
+        if not isinstance(self.hinted, bool):
+            raise ValueError("Hint usage must be boolean.")
         if self.status == "solved":
             if isinstance(self.attempts, bool) or not isinstance(self.attempts, int):
                 raise ValueError("A solved day requires an integer attempt count.")
-            if self.attempts < 1:
-                raise ValueError("A solved day requires at least one attempt.")
+            if self.attempts < 0:
+                raise ValueError("A solved day cannot have negative attempts.")
         elif self.attempts is not None:
             raise ValueError("Only solved days may carry an attempt count.")
 
@@ -92,10 +101,15 @@ def _as_date(value: date | datetime) -> date:
 
 def max_attempts_for(game_name: str) -> int:
     """Return the fixed attempt maximum for a supported game or variant."""
+    return int(fixed_attempt_meta(game_name)["max_attempts"])
+
+
+def fixed_attempt_meta(game_name: str) -> dict:
+    """Return metadata for a supported fixed-attempt game or variant."""
     family = games.fixed_attempt_family(game_name)
     if family is None:
         raise ValueError(f"Unsupported fixed-attempt game: {game_name!r}")
-    return int(games.FIXED_ATTEMPT_GAMES[family]["max_attempts"])
+    return games.FIXED_ATTEMPT_GAMES[family]
 
 
 def chart_layout(period: int, *, spaced_symbol: str,
@@ -198,12 +212,30 @@ def resolve_chart_game(user_id: int, selected_game: str,
     return None, []
 
 
+def _hinted_from_note(note: str | None) -> bool:
+    return bool(note and _TRAVEL_HINT.search(note))
+
+
 def _attempt_from_row(day: date, solved: object, display_score: str | None,
-                      max_attempts: int) -> DailyAttempt | None:
+                      max_attempts: int,
+                      zero_is_best: bool = False) -> DailyAttempt | None:
     """Convert one stored row into a chart state, or None if it is unusable."""
     if solved not in (0, 1) or isinstance(solved, bool):
         return None
     display = (display_score or "").strip()
+    if zero_is_best:
+        if solved == 0:
+            return (DailyAttempt(day, "dnf", None, _hinted_from_note(display))
+                    if re.match(r"^(?:dnf\b|x\b)", display, re.IGNORECASE) else None)
+        score = _TRAVEL_SCORE.match(display)
+        if not score:
+            return None
+        attempts = int(score.group(1))
+        if 0 <= attempts <= max_attempts:
+            return DailyAttempt(day, "solved", attempts,
+                                _hinted_from_note(score.group(2)))
+        return None
+
     dnf = _DNF_DISPLAY.match(display)
     if dnf:
         if solved != 0:
@@ -229,6 +261,9 @@ def load_attempts(user_id: int, game_name: str,
     if end < start:
         raise ValueError("The chart end date must not precede its start date.")
     max_attempts = max_attempts_for(game_name)
+    family = games.fixed_attempt_family(game_name)
+    assert family is not None
+    zero_is_best = bool(games.FIXED_ATTEMPT_GAMES[family].get("zero_is_best"))
 
     with sqlite3.connect(config.DB_PATH) as conn:
         rows = conn.execute(
@@ -247,7 +282,8 @@ def load_attempts(user_id: int, game_name: str,
             continue
         if not start <= day <= end:
             continue
-        attempt = _attempt_from_row(day, solved, display_score, max_attempts)
+        attempt = _attempt_from_row(day, solved, display_score, max_attempts,
+                                    zero_is_best=zero_is_best)
         if attempt is not None:
             # Rows are newest-first, so the first valid row wins deterministically.
             by_day.setdefault(day, attempt)
@@ -411,6 +447,9 @@ def summarize_attempts(daily_results: list[DailyAttempt], *,
 def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
                          start_date: date, end_date: date, *,
                          title: str = "Attempt history",
+                         axis_label: str = "Guesses",
+                         zero_is_best: bool = False,
+                         show_hints: bool = False,
                          period: int = CHART_PERIOD_DAYS) -> str:
     """Render an aligned vertical Unicode bar chart in a code block."""
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
@@ -442,18 +481,26 @@ def render_attempt_chart(daily_results: list[DailyAttempt], max_attempts: int,
     )
     lines = [
         f"{title.upper()} · {start.isoformat()} to {end.isoformat()}",
-        "Guesses (lower = better)",
+        f"{axis_label} (lower = better)",
         "",
     ]
 
-    for attempt in range(max_attempts, 0, -1):
+    hint_levels = {
+        offset: min(max_attempts, result.attempts + 1)
+        for offset, result in enumerate(normalized)
+        if show_hints and result.status == "solved" and result.hinted
+        and result.attempts is not None
+    }
+    for attempt in range(max_attempts, -1 if zero_is_best else 0, -1):
         cells = []
-        for result in normalized:
+        for offset, result in enumerate(normalized):
             if (result.status == "solved" and result.attempts is not None
                     and result.attempts >= attempt):
                 symbol = bar_symbol
             elif result.status == "dnf" and attempt == max_attempts:
                 symbol = "X"
+            elif hint_levels.get(offset) == attempt:
+                symbol = "?"
             else:
                 symbol = " "
             cells.append(symbol.rjust(cell_width))

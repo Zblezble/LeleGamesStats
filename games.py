@@ -62,6 +62,8 @@ FIXED_ATTEMPT_GAMES = {
     "Mathle": {"max_attempts": 6},
     "Regionle": {"max_attempts": 7},
     "Chessle": {"max_attempts": 6},
+    # Travle's native score is extra guesses, where +0 is a perfect run.
+    "Travle": {"max_attempts": 14, "zero_is_best": True},
 }
 
 

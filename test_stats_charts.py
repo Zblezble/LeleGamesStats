@@ -92,7 +92,6 @@ class AttemptModelTests(unittest.TestCase):
         DailyAttempt(day(1), "dnf", None)
         DailyAttempt(day(1), "missing", None)
         invalid_cases: list[tuple[Any, int | None]] = [
-            ("solved", 0),
             ("solved", True),
             ("solved", None),
             ("dnf", 4),
@@ -209,6 +208,7 @@ class AttemptModelTests(unittest.TestCase):
             "Mathle": 6,
             "Regionle": 7,
             "Chessle": 6,
+            "Travle": 14,
         }
         self.assertEqual(
             {name: meta["max_attempts"]
@@ -216,6 +216,9 @@ class AttemptModelTests(unittest.TestCase):
             expected,
         )
         self.assertEqual(stats_charts.max_attempts_for("Regionle"), 7)
+        self.assertEqual(stats_charts.max_attempts_for("Travle"), 14)
+        self.assertTrue(
+            stats_charts.fixed_attempt_meta("Travle").get("zero_is_best"))
         self.assertEqual(
             stats_charts.max_attempts_for("Chessle (Medium)"), 6)
         self.assertEqual(
@@ -303,13 +306,13 @@ class AttemptModelTests(unittest.TestCase):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
-            add_score("2026-11-08", 1, "Alice", "Travle", "#2", 1, 2.0, "+2")
+            add_score("2026-11-08", 1, "Alice", "Metazooa", "#2", 1, 9.0, "9 guesses")
             self.assertEqual(
                 stats_charts.resolve_chart_game(1, "Songless", day(5), day(9)),
                 (None, []),
             )
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Travle", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Metazooa", day(5), day(9)),
                 (None, []),
             )
         finally:
@@ -328,8 +331,9 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("Trivmount", values)
             self.assertIn("Maptap", values)
             self.assertIn("Globle", values)
+            self.assertIn("Travle", values)
             self.assertNotIn("Songless", values)
-            self.assertNotIn("Travle", values)
+            self.assertNotIn("Metazooa", values)
             self.assertNotIn("Chessle (Medium)", values)
             self.assertNotIn("Magnitudle (Size It Up)", values)
         finally:
@@ -411,6 +415,53 @@ class AttemptModelTests(unittest.TestCase):
         )
         self.assertIn(stats_charts.ATTEMPT_COMPACT_SYMBOL * 20, chart)
         self.assertIn("   01      09      17", chart)
+
+    def test_travle_rows_support_zero_hints_and_dnf(self):
+        old_path, old_today, path = fresh_db("2026-11-13")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Travle", "#1", 1, 0.0, "+0")
+            add_score("2026-11-09", 1, "Alice", "Travle", "#2", 1, 3.0, "+2 (1 rada)")
+            add_score("2026-11-10", 1, "Alice", "Travle", "#3", 0, 999.0, "X")
+            add_score("2026-11-11", 1, "Alice", "Travle", "#4", 0, 503.0, "DNF (3 pryč)")
+            add_score("2026-11-12", 1, "Alice", "Travle", "#5", 1, 20.0, "+15")
+            results = stats_charts.load_attempts(1, "Travle", day(8), day(12))
+            self.assertEqual(results, [
+                DailyAttempt(day(8), "solved", 0),
+                DailyAttempt(day(9), "solved", 2, True),
+                DailyAttempt(day(10), "dnf", None),
+                DailyAttempt(day(11), "dnf", None),
+                missing(day(12)),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Travle", day(8), day(11))
+            self.assertEqual((resolved, variants), ("Travle", []))
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_travle_chart_shows_zero_and_hint_markers(self):
+        results = [
+            DailyAttempt(day(1), "solved", 0),
+            DailyAttempt(day(2), "solved", 2, True),
+            DailyAttempt(day(3), "dnf", None),
+            missing(day(4)),
+        ]
+        chart = stats_charts.render_attempt_chart(
+            results, 14, day(1), day(4), title="Travle",
+            axis_label="Extra guesses", zero_is_best=True, show_hints=True,
+        )
+        lines = chart.splitlines()
+        self.assertEqual(lines[0], "TRAVLE · 2026-11-01 to 2026-11-04")
+        self.assertEqual(lines[3], "14 │     X")
+        self.assertEqual(lines[14], " 3 │   ?")
+        self.assertEqual(lines[15], " 2 │   ▄")
+        self.assertEqual(lines[17], " 0 │ ▄ ▄")
+
+        summary = stats_charts.summarize_attempts(results, unit="extra guesses")
+        self.assertEqual(
+            summary,
+            "Played: 3/4 days\nSolved: 2/3 (67%)\nAvg: 1.0 extra guesses\n"
+            "Best: 0 extra guesses",
+        )
 
     def test_score_registry_and_metadata(self):
         expected_renderers = {

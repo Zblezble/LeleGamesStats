@@ -211,11 +211,19 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
                 ephemeral=True,
             )
             return
+        meta = stats_charts.fixed_attempt_meta(game)
         chart = stats_charts.render_attempt_chart(
-            daily_attempts, stats_charts.max_attempts_for(game), start, end,
-            title=game, period=period,
+            daily_attempts, meta["max_attempts"], start, end,
+            title=game,
+            axis_label="Extra guesses" if meta.get("zero_is_best") else "Guesses",
+            zero_is_best=bool(meta.get("zero_is_best")),
+            show_hints=bool(meta.get("zero_is_best")),
+            period=period,
         )
-        summary = stats_charts.summarize_attempts(daily_attempts)
+        summary = stats_charts.summarize_attempts(
+            daily_attempts,
+            unit="extra guesses" if meta.get("zero_is_best") else "guesses",
+        )
     elif guess_chart_family(game) is not None:
         daily_guesses = stats_charts.load_guesses(target.id, game, start, end)
         if not any(result.status != "missing" for result in daily_guesses):
