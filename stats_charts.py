@@ -34,6 +34,8 @@ _DNF_DISPLAY = re.compile(r"^(?:dnf|x\s*/\s*([1-9]\d*))$", re.IGNORECASE)
 _NUMBER_TEXT = r"\d[\d,]*"
 _SCORE_RATIO = re.compile(rf"^({_NUMBER_TEXT})\s*/\s*({_NUMBER_TEXT})")
 _SCORE_POINTS = re.compile(rf"^({_NUMBER_TEXT})\s*pts$", re.IGNORECASE)
+_REDACTLE_SCORE = re.compile(r"^(\d+)g(?:,\s*(\d+)h)?(?:\s*\(|$)", re.IGNORECASE)
+_ROUGHLY_GRID = re.compile(r"^~(\d+(?:\.\d+)?)%(?:\s*·|$)", re.IGNORECASE)
 _GUESS_COUNT = re.compile(r"^(\d+)\s+guesses$", re.IGNORECASE)
 _TRAVEL_SCORE = re.compile(r"^\s*([+-]?\d+)(?:\s*\(([^)]*)\))?")
 _TRAVEL_HINT = re.compile(r"(?:^|\s)(?:(\d+)\s*(?:rady?|hints?)|\?)", re.IGNORECASE)
@@ -74,10 +76,16 @@ class DailyScore:
     status: ScoreStatus
     score: float | None = None
     maximum: float | None = None
+    hints: int | None = None
 
     def __post_init__(self):
         if self.status not in ("score", "dnf", "missing"):
             raise ValueError(f"Unsupported score status: {self.status!r}")
+        if self.hints is not None and (
+            isinstance(self.hints, bool) or not isinstance(self.hints, int)
+            or self.hints < 0
+        ):
+            raise ValueError("Hint count must be a nonnegative integer.")
         if self.status == "score":
             if (isinstance(self.score, bool) or not isinstance(self.score, (int, float))
                     or not math.isfinite(self.score) or self.score < 0):
@@ -90,7 +98,6 @@ class DailyScore:
                     raise ValueError("A score cannot exceed its displayed maximum.")
         elif self.score is not None or self.maximum is not None:
             raise ValueError("Only scored days may carry score values.")
-
 
 def _as_date(value: date | datetime) -> date:
     if isinstance(value, datetime):
@@ -315,8 +322,30 @@ def _score_from_row(day: date, solved: object, display_score: str | None,
             return None
         score, maximum = number(ratio.group(1)), number(ratio.group(2))
         if maximum > 0 and 0 <= score <= maximum:
+            if meta.get("max_score") is not None and maximum > meta["max_score"]:
+                return None
             return DailyScore(day, "score", score, maximum)
         return None
+
+    if games.score_chart_family(game_name) == "Roughly (Where from)":
+        if solved != 1:
+            return DailyScore(day, "dnf", None, None, None)
+        match = _ROUGHLY_GRID.match(display)
+        if not match:
+            return None  # Legacy headline-only shares are not grid-compatible.
+        score = float(match.group(1))
+        if 0 <= score <= 100:
+            return DailyScore(day, "score", score, None, None)
+        return None
+
+    if games.score_chart_family(game_name) == "Redactle":
+        if solved == 0:
+            return DailyScore(day, "dnf", None, None, None)
+        match = _REDACTLE_SCORE.match(display)
+        if not match:
+            return None
+        hints = int(match.group(2)) if match.group(2) else 0
+        return DailyScore(day, "score", int(match.group(1)), None, hints)
 
     if games.score_chart_family(game_name) == "Maptap":
         points = _SCORE_POINTS.match(display)
@@ -365,7 +394,7 @@ def load_scores(user_id: int, game_name: str,
 
     return [
         by_day.get(start + timedelta(days=offset),
-                   DailyScore(start + timedelta(days=offset), "missing", None, None))
+                   DailyScore(start + timedelta(days=offset), "missing", None, None, None))
         for offset in range((end - start).days + 1)
     ]
 
@@ -641,23 +670,35 @@ def summarize_fixed_scores(daily_results: list[DailyScore],
     ])
 
 
-def summarize_scaled_scores(daily_results: list[DailyScore], *, unit: str = "pts") -> str:
+def summarize_scaled_scores(daily_results: list[DailyScore], *, unit: str = "pts",
+                            lower_is_better: bool = False,
+                            include_hints: bool = False,
+                            estimated: bool = False) -> str:
     """Summarize raw score history; chart scaling never alters these values."""
     played = [result for result in daily_results if result.status != "missing"]
     scored = [result for result in played if result.status == "score"]
     scores = [result.score for result in scored if result.score is not None]
-    average = f"{_format_number(sum(scores) / len(scores))} {unit}" if scores else "—"
-    best = f"{_format_number(max(scores))} {unit}" if scores else "—"
-    return "\n".join([
+    best = min(scores) if lower_is_better else max(scores)
+    marker = "~" if estimated else ""
+    unit_text = unit if unit == "%" else f" {unit}"
+    average = f"{marker}{_format_number(sum(scores) / len(scores))}{unit_text}" if scores else "—"
+    best_text = f"{marker}{_format_number(best)}{unit_text}" if scores else "—"
+    lines = [
         f"Played: {len(played)}/{len(daily_results)} days",
         f"Avg: {average}",
-        f"Best: {best}",
-    ])
+        f"Best: {best_text}",
+    ]
+    if include_hints:
+        hints = sum(result.hints for result in scored if result.hints is not None)
+        if hints:
+            lines.append(f"Hints: {hints}")
+    return "\n".join(lines)
 
 
 def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float | None,
                              start_date: date, end_date: date, *,
                              title: str = "Score history", unit: str = "score",
+                             zero_axis: bool = False,
                              period: int = CHART_PERIOD_DAYS) -> str:
     """Render raw correct-answer scores with one row per positive score."""
     results = _validate_score_results(daily_results, start_date, end_date)
@@ -698,6 +739,17 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
             cells.append(symbol.rjust(cell_width))
         lines.append((f"{level:>{axis_width}} │" + "".join(cells)).rstrip())
 
+    if zero_axis:
+        zero_cells = []
+        for result in results:
+            if result.status == "score" and result.score == 0:
+                zero_cells.append(" 0")
+            elif result.status == "dnf":
+                zero_cells.append(" " + DNF_COLUMN_SYMBOL)
+            else:
+                zero_cells.append("  ")
+        lines.append(f"{'0':>{axis_width}} │" + "".join(zero_cells).rstrip())
+
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(results)))
     lines.append(" " * (axis_width + 2) + _date_labels(results, cell_width))
     return "\n".join(lines)
@@ -706,6 +758,12 @@ def render_fixed_score_chart(daily_results: list[DailyScore], nominal_max: float
 def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: float | None,
                               start_date: date, end_date: date, *,
                               title: str = "Score history", unit: str = "pts",
+                              lower_is_better: bool = False,
+                              cap_outliers: bool = False,
+                              fixed_axis: bool = False,
+                              estimated: bool = False,
+                              axis_suffix: str | None = None,
+                              axis_label: str | None = None,
                               period: int = CHART_PERIOD_DAYS) -> str:
     """Render raw scores on a compact, dynamically scaled ten-row chart.
 
@@ -715,12 +773,19 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
     """
     results = _validate_score_results(daily_results, start_date, end_date)
     chart_height = 10
-    raw_max = max(
-        [result.score for result in results if result.status == "score"
-         and result.score is not None]
-        + [nominal_max or 0]
-    )
-    scale_max = _nice_ceiling(max(raw_max, 1.0))
+    scores = [result.score for result in results if result.status == "score"
+              and result.score is not None]
+    if fixed_axis:
+        scale_source = nominal_max or 0
+    elif cap_outliers and scores:
+        ordered = sorted(scores)
+        # Ignore the top quartile when choosing the axis so one extreme run
+        # cannot flatten the rest of a short personal history.
+        typical_index = max(0, math.ceil(len(ordered) * 0.75) - 1)
+        scale_source = max(ordered[typical_index], nominal_max or 0)
+    else:
+        scale_source = max([*scores, nominal_max or 0])
+    scale_max = _nice_ceiling(max(scale_source, 1.0))
     bucket_width = scale_max / chart_height
     levels = {
         id(result): 0 if result.status != "score" or result.score is None else min(
@@ -735,9 +800,14 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
         period, spaced_symbol=SCORE_SYMBOL,
         compact_symbol=SCORE_COMPACT_SYMBOL,
     )
+    suffix = axis_suffix or ""
+    axis_text = axis_label or (
+        f"{unit.capitalize()} (lower = better)" if lower_is_better
+        else f"Raw {unit} (higher = better)"
+    )
     lines = [
         f"{title.upper()} · {start_date.isoformat()} to {end_date.isoformat()}",
-        f"Raw {unit} (higher = better)",
+        axis_text,
         "",
     ]
 
@@ -755,7 +825,7 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
                 symbol = " "
             cells.append(symbol.rjust(cell_width))
         lines.append(
-            f"{_format_number(tick):>{axis_width}} │" + "".join(cells).rstrip()
+            f"{_format_number(tick):>{axis_width}}{suffix} │" + "".join(cells).rstrip()
         )
 
     lines.append(" " * (axis_width + 1) + "└" + "─" * (cell_width * len(results)))

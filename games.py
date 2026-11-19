@@ -84,9 +84,27 @@ SCORE_CHART_GAMES = {
     "History in Order": {"renderer": "fixed_score", "max_score": None, "unit": "correct"},
     "Majority": {"renderer": "fixed_score", "max_score": 5, "unit": "majorities"},
     "Songspot": {"renderer": "fixed_score", "max_score": 5, "unit": "songs"},
+    # Songless stores solved songs; the tries detail is a leaderboard tiebreak only.
+    "Songless": {
+        "renderer": "fixed_score", "max_score": 5, "unit": "songs",
+        "zero_axis": True,
+    },
     "Centumth": {"renderer": "scaled_score", "max_score": 490, "unit": "pts"},
     "Magnitudle": {"renderer": "scaled_score", "max_score": 500, "unit": "pts"},
     "Maptap": {"renderer": "scaled_score", "max_score": None, "unit": "pts"},
+    # ``max_score`` is Redactle's default axis, not a hard maximum. Successful
+    # shares store raw guesses; DNFs never use their 10000+ sentinel.
+    "Redactle": {
+        "renderer": "scaled_score", "max_score": 100, "unit": "guesses",
+        "lower_is_better": True, "cap_outliers": True, "show_hints": True,
+    },
+    # Only the actively played Where-from grid shares are charted; How-big and
+    # legacy headline-only shares use incompatible scales and stay excluded.
+    "Roughly (Where from)": {
+        "renderer": "scaled_score", "max_score": 100, "unit": "%",
+        "fixed_axis": True, "estimated": True, "axis_suffix": "%",
+        "axis_label": "Estimated grid average (higher = better)",
+    },
 }
 
 

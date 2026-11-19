@@ -256,18 +256,29 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         if meta["renderer"] == "fixed_score":
             chart = stats_charts.render_fixed_score_chart(
                 daily_scores, meta["max_score"], start, end,
-                title=game, unit=meta["unit"], period=period,
+                title=game, unit=meta["unit"],
+                zero_axis=bool(meta.get("zero_axis")), period=period,
             )
             summary = stats_charts.summarize_fixed_scores(
                 daily_scores, meta["max_score"],
             )
         else:
+            lower_is_better = bool(meta.get("lower_is_better"))
             chart = stats_charts.render_scaled_score_chart(
                 daily_scores, meta["max_score"], start, end,
-                title=game, unit=meta["unit"], period=period,
+                title=game, unit=meta["unit"],
+                lower_is_better=lower_is_better,
+                cap_outliers=bool(meta.get("cap_outliers")),
+                fixed_axis=bool(meta.get("fixed_axis")),
+                estimated=bool(meta.get("estimated")),
+                axis_suffix=meta.get("axis_suffix"),
+                axis_label=meta.get("axis_label"),
+                period=period,
             )
             summary = stats_charts.summarize_scaled_scores(
-                daily_scores, unit=meta["unit"],
+                daily_scores, unit=meta["unit"], lower_is_better=lower_is_better,
+                include_hints=bool(meta.get("show_hints")),
+                estimated=bool(meta.get("estimated")),
             )
 
     embed = discord.Embed(

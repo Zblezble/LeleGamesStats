@@ -306,14 +306,14 @@ class AttemptModelTests(unittest.TestCase):
     def test_unsupported_game_is_not_resolved(self):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
-            add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
-            add_score("2026-11-08", 1, "Alice", "Redactle", "#2", 1, 18.0, "18g")
+            add_score("2026-11-08", 1, "Alice", "Roughly (How big)", "#1", 1, -79.0099, "~79% · best 99%")
+            add_score("2026-11-08", 1, "Alice", "Thursday Thirty", "#2", 1, -73.0, "22/30 (73%)")
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Songless", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Roughly (How big)", day(5), day(9)),
                 (None, []),
             )
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Redactle", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Thursday Thirty", day(5), day(9)),
                 (None, []),
             )
         finally:
@@ -322,7 +322,7 @@ class AttemptModelTests(unittest.TestCase):
     def test_autocomplete_offers_only_chartable_games(self):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
-            add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -100.0, "2/2 (Roc:1 Pop:2)")
+            add_score("2026-11-08", 1, "Alice", "Roughly (How big)", "#1", 1, -79.0099, "~79% · best 99%")
             add_score("2026-11-08", 1, "Alice", "Globle", "#2", 1, 5.0, "5 guesses")
             choices = asyncio.run(commands._chart_game_autocomplete(None, ""))
             values = {choice.value for choice in choices}
@@ -334,8 +334,11 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("Globle", values)
             self.assertIn("Travle", values)
             self.assertIn("Metazooa", values)
-            self.assertNotIn("Songless", values)
-            self.assertNotIn("Redactle", values)
+            self.assertIn("Redactle", values)
+            self.assertIn("Songless", values)
+            self.assertIn("Roughly (Where from)", values)
+            self.assertNotIn("Roughly (How big)", values)
+            self.assertNotIn("Thursday Thirty", values)
             self.assertNotIn("Chessle (Medium)", values)
             self.assertNotIn("Magnitudle (Size It Up)", values)
         finally:
@@ -509,9 +512,12 @@ class AttemptModelTests(unittest.TestCase):
             "History in Order": "fixed_score",
             "Majority": "fixed_score",
             "Songspot": "fixed_score",
+            "Songless": "fixed_score",
             "Centumth": "scaled_score",
             "Magnitudle": "scaled_score",
             "Maptap": "scaled_score",
+            "Redactle": "scaled_score",
+            "Roughly (Where from)": "scaled_score",
         }
         self.assertEqual(
             {name: meta["renderer"]
@@ -520,14 +526,28 @@ class AttemptModelTests(unittest.TestCase):
         )
         self.assertEqual(stats_charts.score_chart_meta("Trivmount")["max_score"], 12)
         self.assertEqual(stats_charts.score_chart_meta("Maptap")["max_score"], None)
-        self.assertEqual(games.score_chart_family("Magnitudle (Size It Up)"), "Magnitudle")
-        self.assertIsNone(games.score_chart_family("Songless"))
+        self.assertEqual(stats_charts.score_chart_meta("Redactle")["max_score"], 100)
+        self.assertTrue(
+            stats_charts.score_chart_meta("Redactle").get("lower_is_better"))
+        self.assertTrue(
+            stats_charts.score_chart_meta("Redactle").get("cap_outliers"))
+        self.assertEqual(stats_charts.score_chart_meta("Songless")["max_score"], 5)
+        self.assertTrue(
+            stats_charts.score_chart_meta("Songless").get("zero_axis"))
+        self.assertEqual(
+            stats_charts.score_chart_meta("Roughly (Where from)")["max_score"], 100)
+        self.assertTrue(
+            stats_charts.score_chart_meta("Roughly (Where from)").get("fixed_axis"))
+        self.assertTrue(
+            stats_charts.score_chart_meta("Roughly (Where from)").get("estimated"))
+        self.assertIsNone(games.score_chart_family("Roughly (How big)"))
 
     def test_score_states_are_validated(self):
         scored(day(1), 0, 12)
         scored(day(1), 12, 12)
         score_dnf(day(1))
         score_missing(day(1))
+        DailyScore(day(1), "score", 18, None, 2)
         for invalid in (
             ("score", -1, 12),
             ("score", 13, 12),
@@ -539,6 +559,10 @@ class AttemptModelTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaises(ValueError):
                     DailyScore(day(1), invalid[0], invalid[1], invalid[2])
+        for invalid_hints in (-1, True, "2"):
+            with self.subTest(hints=invalid_hints):
+                with self.assertRaises(ValueError):
+                    DailyScore(day(1), "score", 18, None, invalid_hints)
 
     def test_fixed_score_chart_boundaries_zero_and_missing(self):
         results = [
@@ -633,6 +657,128 @@ class AttemptModelTests(unittest.TestCase):
         self.assertEqual(rows[11], " 200 │       ▉ ▉")
         self.assertEqual(rows[10], " 300 │         ▉")
         self.assertEqual(rows[4], " 900 │         ▉")
+
+    def test_redactle_uses_raw_guesses_and_caps_outliers(self):
+        old_path, old_today, path = fresh_db("2026-11-13")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Redactle", "#1", 1, 18.0, "18g (1m10s)")
+            add_score("2026-11-09", 1, "Alice", "Redactle", "#2", 1, 44.0, "43g, 1h (6m16s)")
+            add_score("2026-11-10", 1, "Alice", "Redactle", "#3", 1, 100.0, "100g")
+            add_score("2026-11-11", 1, "Alice", "Redactle", "#4", 1, 1000.0, "1000g")
+            add_score("2026-11-12", 1, "Alice", "Redactle", "#5", 0, 10055.0, "DNF (55g)")
+            results = stats_charts.load_scores(1, "Redactle", day(8), day(12))
+            self.assertEqual(results, [
+                DailyScore(day(8), "score", 18, None, 0),
+                DailyScore(day(9), "score", 43, None, 1),
+                DailyScore(day(10), "score", 100, None, 0),
+                DailyScore(day(11), "score", 1000, None, 0),
+                score_dnf(day(12)),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Redactle", day(8), day(12))
+            self.assertEqual((resolved, variants), ("Redactle", []))
+
+            chart = stats_charts.render_scaled_score_chart(
+                results, 100, day(8), day(12), title="Redactle", unit="guesses",
+                lower_is_better=True, cap_outliers=True,
+            )
+            lines = chart.splitlines()
+            self.assertEqual(lines[1], "Guesses (lower = better)")
+            self.assertEqual(lines[3], "100 │     ▉ ▉ X")
+            self.assertEqual(lines[4], " 90 │     ▉ ▉ │")
+            self.assertNotIn("1100 │", chart)
+            self.assertNotIn("10000 │", chart)
+            self.assertIn(" 10 │ ▉", chart)
+            self.assertEqual(
+                stats_charts.summarize_scaled_scores(
+                    results, unit="guesses", lower_is_better=True,
+                    include_hints=True,
+                ),
+                "Played: 5/5 days\nAvg: 290.2 guesses\nBest: 18 guesses\nHints: 1",
+            )
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_songless_uses_solved_songs_and_zero_axis(self):
+        old_path, old_today, path = fresh_db("2026-11-12")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Songless", "#1", 1, -500.0, "5/5 (Roc:1 Pop:2)")
+            add_score("2026-11-09", 1, "Alice", "Songless", "#2", 1, 0.0, "0/5")
+            add_score("2026-11-10", 1, "Alice", "Songless", "#3", 0, 999.0, "DNF")
+            add_score("2026-11-11", 1, "Alice", "Songless", "#4", 1, -600.0, "6/5")
+            results = stats_charts.load_scores(1, "Songless", day(8), day(11))
+            self.assertEqual(results, [
+                scored(day(8), 5, 5),
+                scored(day(9), 0, 5),
+                score_dnf(day(10)),
+                score_missing(day(11)),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Songless", day(8), day(11))
+            self.assertEqual((resolved, variants), ("Songless", []))
+
+            chart = stats_charts.render_fixed_score_chart(
+                results, 5, day(8), day(11), title="Songless", unit="songs",
+                zero_axis=True,
+            )
+            lines = chart.splitlines()
+            self.assertEqual(lines[1], "Songs (higher = better)")
+            self.assertEqual(lines[3], "5 │ ▄   X")
+            self.assertEqual(lines[4], "4 │ ▄   │")
+            self.assertEqual(lines[8], "0 │   0 │")
+            self.assertEqual(
+                stats_charts.summarize_fixed_scores(results, 5),
+                "Played: 3/4 days\nAvg: 2.5/5\nBest: 5/5\nPerfect: 1",
+            )
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_roughly_where_uses_grid_averages_on_fixed_axis(self):
+        old_path, old_today, path = fresh_db("2026-11-13")
+        try:
+            add_score("2026-11-08", 1, "Alice", "Roughly (Where from)", "#1", 1,
+                      -65.0095, "~65% · best 95%")
+            add_score("2026-11-09", 1, "Alice", "Roughly (Where from)", "#2", 1,
+                      -92.5, "~92.5% · best 80%")
+            add_score("2026-11-10", 1, "Alice", "Roughly (Where from)", "#3", 1,
+                      -97.0, "Top 3% (97%)")
+            add_score("2026-11-11", 1, "Alice", "Roughly (How big)", "#4", 1,
+                      -79.0099, "~79% · best 99%")
+            add_score("2026-11-12", 1, "Alice", "Roughly (Where from)", "#5", 0,
+                      999.0, "DNF")
+            results = stats_charts.load_scores(1, "Roughly (Where from)", day(8), day(12))
+            self.assertEqual(results, [
+                DailyScore(day(8), "score", 65.0, None, None),
+                DailyScore(day(9), "score", 92.5, None, None),
+                score_missing(day(10)),
+                score_missing(day(11)),
+                score_dnf(day(12)),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Roughly (Where from)", day(8), day(12))
+            self.assertEqual((resolved, variants), ("Roughly (Where from)", []))
+
+            chart = stats_charts.render_scaled_score_chart(
+                results, 100, day(8), day(12), title="Roughly (Where from)",
+                unit="%", fixed_axis=True, estimated=True, axis_suffix="%",
+                axis_label="Estimated grid average (higher = better)",
+            )
+            lines = chart.splitlines()
+            self.assertEqual(
+                lines[1], "Estimated grid average (higher = better)")
+            self.assertEqual(lines[3], "100% │         X")
+            self.assertEqual(lines[4], " 90% │   ▉     │")
+            self.assertEqual(lines[6], " 70% │ ▉ ▉     │")
+            self.assertNotIn("Top 3%", chart)
+            self.assertNotIn("~79% · best 99%", chart)
+            self.assertEqual(
+                stats_charts.summarize_scaled_scores(
+                    results, unit="%", estimated=True,
+                ),
+                "Played: 3/5 days\nAvg: ~78.8%\nBest: ~92.5%",
+            )
+        finally:
+            cleanup(old_path, old_today, path)
 
     def test_stored_scores_map_to_score_chart_states(self):
         old_path, old_today, path = fresh_db("2026-11-18")
