@@ -835,6 +835,26 @@ class AttemptModelTests(unittest.TestCase):
         finally:
             cleanup(old_path, old_today, path)
 
+    def test_roughly_where_alias_resolves_to_chart_family(self):
+        old_path, old_today, path = fresh_db("2026-11-18")
+        try:
+            add_score("2026-11-17", 1, "Alice", "Roughly (Where)", "#1", 1,
+                      -65.0095, "~65% · best 95%")
+            self.assertEqual(
+                games.score_chart_family("Roughly (Where)"),
+                "Roughly (Where from)",
+            )
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Roughly (Where from)", day(11), day(18))
+            self.assertEqual((resolved, variants), ("Roughly (Where)", []))
+            results = stats_charts.load_scores(1, "Roughly (Where)", day(17), day(17))
+            self.assertEqual(
+                results,
+                [DailyScore(day(17), "score", 65.0, None, None)],
+            )
+        finally:
+            cleanup(old_path, old_today, path)
+
     def test_stored_scores_map_to_score_chart_states(self):
         old_path, old_today, path = fresh_db("2026-11-18")
         try:

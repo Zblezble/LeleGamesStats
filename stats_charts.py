@@ -204,15 +204,23 @@ def resolve_chart_game(user_id: int, selected_game: str,
     exact = [name for name in candidates if name.casefold() == selected]
     if exact:
         return exact[0], []
+    preferred = games.chart_preferred_variant(family)
+    if preferred and "(" not in selected and any(
+            name.casefold() == preferred.casefold() for name in candidates):
+        return preferred, []
+    # Selecting the canonical family (including labels that contain a variant)
+    # may use its sole stored alias/variant, but never silently combines several.
+    if selected == family.casefold():
+        if len(candidates) == 1:
+            return candidates[0], []
+        if candidates:
+            return None, candidates
+        return None, []
     # A base-name request may use its sole played variant, or the registry's
     # designated active variant. An explicit variant request must not silently
     # substitute a different variant.
     if "(" in selected:
         return None, []
-    preferred = games.chart_preferred_variant(family)
-    if preferred and any(name.casefold() == preferred.casefold()
-                         for name in candidates):
-        return preferred, []
     if len(candidates) == 1:
         return candidates[0], []
     if len(candidates) > 1:

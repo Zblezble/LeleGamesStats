@@ -113,9 +113,21 @@ SCORE_CHART_GAMES = {
 }
 
 
+# Aliases keep parser variants chartable without changing their stored names.
+SCORE_CHART_ALIASES = {
+    "Roughly (Where)": "Roughly (Where from)",
+}
+_SCORE_CHART_ALIASES_FOLDED = {
+    source.casefold(): target for source, target in SCORE_CHART_ALIASES.items()
+}
+
+
 def score_chart_family(game_name: str) -> str | None:
     """Return the score-chart family for an exact game or meaningful submode."""
     folded = (game_name or "").strip().casefold()
+    # Older/newer Roughly shares may label the same Where-from mode as "Where".
+    # Keep the stored game names intact, but resolve them to the chart family.
+    folded = _SCORE_CHART_ALIASES_FOLDED.get(folded, folded).casefold()
     for family in SCORE_CHART_GAMES:
         family_folded = family.casefold()
         if folded == family_folded or folded.startswith(family_folded + " ("):

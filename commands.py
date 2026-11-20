@@ -205,7 +205,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         else:
             await interaction.response.send_message(
                 f"No **{selected_game}** results for {target.display_name} between "
-                f"{start.isoformat()} and {end.isoformat}.",
+                f"{start.isoformat()} and {end.isoformat()}.",
                 ephemeral=True,
             )
         return
@@ -215,7 +215,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         if not any(result.status != "missing" for result in daily_attempts):
             await interaction.response.send_message(
                 f"No **{game}** results for {target.display_name} between "
-                f"{start.isoformat()} and {end.isoformat}.",
+                f"{start.isoformat()} and {end.isoformat()}.",
                 ephemeral=True,
             )
             return
@@ -237,7 +237,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         if not any(result.status != "missing" for result in daily_guesses):
             await interaction.response.send_message(
                 f"No **{game}** results for {target.display_name} between "
-                f"{start.isoformat()} and {end.isoformat}.",
+                f"{start.isoformat()} and {end.isoformat()}.",
                 ephemeral=True,
             )
             return
@@ -262,7 +262,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         if not any(result.status != "missing" for result in daily_scores):
             await interaction.response.send_message(
                 f"No **{game}** results for {target.display_name} between "
-                f"{start.isoformat()} and {end.isoformat}.",
+                f"{start.isoformat()} and {end.isoformat()}.",
                 ephemeral=True,
             )
             return
