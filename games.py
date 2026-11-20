@@ -92,6 +92,11 @@ SCORE_CHART_GAMES = {
     "Centumth": {"renderer": "scaled_score", "max_score": 490, "unit": "pts"},
     "Magnitudle": {"renderer": "scaled_score", "max_score": 500, "unit": "pts"},
     "Maptap": {"renderer": "scaled_score", "max_score": None, "unit": "pts"},
+    # Weekly history uses one column per Thursday, not one per calendar day.
+    "Thursday Thirty": {
+        "renderer": "scaled_score", "max_score": 30, "unit": "correct",
+        "fixed_axis": True, "weekly": True,
+    },
     # ``max_score`` is Redactle's default axis, not a hard maximum. Successful
     # shares store raw guesses; DNFs never use their 10000+ sentinel.
     "Redactle": {

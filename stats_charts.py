@@ -356,9 +356,57 @@ def _score_from_row(day: date, solved: object, display_score: str | None,
     if not ratio:
         return None
     score, maximum = number(ratio.group(1)), number(ratio.group(2))
+    nominal_max = meta.get("max_score")
+    if nominal_max is not None and maximum != nominal_max:
+        return None
     if maximum > 0 and 0 <= score <= maximum:
         return DailyScore(day, "score", score, maximum)
     return None
+
+
+def weekly_thursdays(end_date: date | datetime, count: int) -> list[date]:
+    """Return the latest ``count`` Thursdays, ending on or before ``end_date``."""
+    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+        raise ValueError("Weekly history requires at least one Thursday.")
+    end = _as_date(end_date)
+    latest = end - timedelta(days=(end.weekday() - 3) % 7)
+    return [latest - timedelta(weeks=count - 1 - offset)
+            for offset in range(count)]
+
+
+def load_scores_on_dates(user_id: int, game_name: str,
+                         dates: list[date]) -> list[DailyScore]:
+    """Load one user's latest valid score for each requested calendar date."""
+    if not dates:
+        return []
+    ordered_dates = sorted({_as_date(value) for value in dates})
+    score_chart_meta(game_name)
+    placeholders = ",".join("?" for _ in ordered_dates)
+
+    with sqlite3.connect(config.DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT board_date, solved, display_score"
+            " FROM scores WHERE user_id = ? AND game = ? COLLATE NOCASE"
+            f" AND board_date IN ({placeholders})"
+            " ORDER BY board_date ASC, timestamp DESC, id DESC",
+            (user_id, game_name, *(value.isoformat() for value in ordered_dates)),
+        ).fetchall()
+
+    by_day: dict[date, DailyScore] = {}
+    for board_date, solved, display_score in rows:
+        try:
+            day = date.fromisoformat(board_date)
+        except (TypeError, ValueError):
+            continue
+        result = _score_from_row(day, solved, display_score, game_name)
+        if result is not None:
+            # Rows are date-first/newest-first, so the first valid row wins.
+            by_day.setdefault(day, result)
+
+    return [
+        by_day.get(value, DailyScore(value, "missing", None, None, None))
+        for value in ordered_dates
+    ]
 
 
 def load_scores(user_id: int, game_name: str,
@@ -626,9 +674,22 @@ def _nice_ceiling(value: float) -> float:
 
 
 def _validate_score_results(daily_results: list[DailyScore],
-                            start_date: date, end_date: date) -> list[DailyScore]:
+                            start_date: date, end_date: date,
+                            expected_dates: list[date] | None = None) -> list[DailyScore]:
     start = _as_date(start_date)
     end = _as_date(end_date)
+    if expected_dates is not None:
+        expected = sorted(_as_date(value) for value in expected_dates)
+        if end < start or len(daily_results) != len(expected):
+            raise ValueError("daily_results must cover the expected dates exactly.")
+        normalized: list[DailyScore] = []
+        for offset, result in enumerate(daily_results):
+            if not isinstance(result, DailyScore):
+                raise TypeError(f"Expected DailyScore, got {type(result).__name__}")
+            if _as_date(result.date) != expected[offset]:
+                raise ValueError("daily_results must be in chronological expected-date order.")
+            normalized.append(result)
+        return normalized
     expected_days = (end - start).days + 1
     if end < start or len(daily_results) != expected_days:
         raise ValueError("daily_results must cover the inclusive date range exactly.")
@@ -673,6 +734,7 @@ def summarize_fixed_scores(daily_results: list[DailyScore],
 def summarize_scaled_scores(daily_results: list[DailyScore], *, unit: str = "pts",
                             lower_is_better: bool = False,
                             include_hints: bool = False,
+                            include_perfect: bool = False,
                             estimated: bool = False) -> str:
     """Summarize raw score history; chart scaling never alters these values."""
     played = [result for result in daily_results if result.status != "missing"]
@@ -692,6 +754,12 @@ def summarize_scaled_scores(daily_results: list[DailyScore], *, unit: str = "pts
         hints = sum(result.hints for result in scored if result.hints is not None)
         if hints:
             lines.append(f"Hints: {hints}")
+    if include_perfect:
+        perfect = sum(
+            result.maximum is not None and result.score == result.maximum
+            for result in scored
+        )
+        lines.append(f"Perfect: {perfect}")
     return "\n".join(lines)
 
 
@@ -764,6 +832,7 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
                               estimated: bool = False,
                               axis_suffix: str | None = None,
                               axis_label: str | None = None,
+                              expected_dates: list[date] | None = None,
                               period: int = CHART_PERIOD_DAYS) -> str:
     """Render raw scores on a compact, dynamically scaled ten-row chart.
 
@@ -771,21 +840,23 @@ def render_scaled_score_chart(daily_results: list[DailyScore], nominal_max: floa
     of the first bucket (for example 0–49 on a 0–1000 scale) has no bar, so a
     valid zero looks quiet rather than being mistaken for a positive score.
     """
-    results = _validate_score_results(daily_results, start_date, end_date)
+    results = _validate_score_results(daily_results, start_date, end_date,
+                                      expected_dates=expected_dates)
     chart_height = 10
     scores = [result.score for result in results if result.status == "score"
               and result.score is not None]
     if fixed_axis:
-        scale_source = nominal_max or 0
-    elif cap_outliers and scores:
-        ordered = sorted(scores)
-        # Ignore the top quartile when choosing the axis so one extreme run
-        # cannot flatten the rest of a short personal history.
-        typical_index = max(0, math.ceil(len(ordered) * 0.75) - 1)
-        scale_source = max(ordered[typical_index], nominal_max or 0)
+        scale_max = max(nominal_max or 0, 1.0)
     else:
-        scale_source = max([*scores, nominal_max or 0])
-    scale_max = _nice_ceiling(max(scale_source, 1.0))
+        if cap_outliers and scores:
+            ordered = sorted(scores)
+            # Ignore the top quartile when choosing the axis so one extreme run
+            # cannot flatten the rest of a short personal history.
+            typical_index = max(0, math.ceil(len(ordered) * 0.75) - 1)
+            scale_source = max(ordered[typical_index], nominal_max or 0)
+        else:
+            scale_source = max([*scores, nominal_max or 0])
+        scale_max = _nice_ceiling(max(scale_source, 1.0))
     bucket_width = scale_max / chart_height
     levels = {
         id(result): 0 if result.status != "score" or result.score is None else min(

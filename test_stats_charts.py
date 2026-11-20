@@ -307,13 +307,13 @@ class AttemptModelTests(unittest.TestCase):
         old_path, old_today, path = fresh_db("2026-11-09")
         try:
             add_score("2026-11-08", 1, "Alice", "Roughly (How big)", "#1", 1, -79.0099, "~79% · best 99%")
-            add_score("2026-11-08", 1, "Alice", "Thursday Thirty", "#2", 1, -73.0, "22/30 (73%)")
+            add_score("2026-11-08", 1, "Alice", "Roughly", "#2", 1, -65.0, "~65% · best 95%")
             self.assertEqual(
                 stats_charts.resolve_chart_game(1, "Roughly (How big)", day(5), day(9)),
                 (None, []),
             )
             self.assertEqual(
-                stats_charts.resolve_chart_game(1, "Thursday Thirty", day(5), day(9)),
+                stats_charts.resolve_chart_game(1, "Roughly", day(5), day(9)),
                 (None, []),
             )
         finally:
@@ -337,8 +337,8 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("Redactle", values)
             self.assertIn("Songless", values)
             self.assertIn("Roughly (Where from)", values)
+            self.assertIn("Thursday Thirty", values)
             self.assertNotIn("Roughly (How big)", values)
-            self.assertNotIn("Thursday Thirty", values)
             self.assertNotIn("Chessle (Medium)", values)
             self.assertNotIn("Magnitudle (Size It Up)", values)
         finally:
@@ -518,6 +518,7 @@ class AttemptModelTests(unittest.TestCase):
             "Maptap": "scaled_score",
             "Redactle": "scaled_score",
             "Roughly (Where from)": "scaled_score",
+            "Thursday Thirty": "scaled_score",
         }
         self.assertEqual(
             {name: meta["renderer"]
@@ -540,6 +541,12 @@ class AttemptModelTests(unittest.TestCase):
             stats_charts.score_chart_meta("Roughly (Where from)").get("fixed_axis"))
         self.assertTrue(
             stats_charts.score_chart_meta("Roughly (Where from)").get("estimated"))
+        self.assertEqual(
+            stats_charts.score_chart_meta("Thursday Thirty")["max_score"], 30)
+        self.assertTrue(
+            stats_charts.score_chart_meta("Thursday Thirty").get("fixed_axis"))
+        self.assertTrue(
+            stats_charts.score_chart_meta("Thursday Thirty").get("weekly"))
         self.assertIsNone(games.score_chart_family("Roughly (How big)"))
 
     def test_score_states_are_validated(self):
@@ -776,6 +783,54 @@ class AttemptModelTests(unittest.TestCase):
                     results, unit="%", estimated=True,
                 ),
                 "Played: 3/5 days\nAvg: ~78.8%\nBest: ~92.5%",
+            )
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_thursday_thirty_uses_last_thursdays(self):
+        old_path, old_today, path = fresh_db("2026-11-18")
+        try:
+            self.assertEqual(
+                stats_charts.weekly_thursdays(date(2025, 1, 2), 3),
+                [date(2024, 12, 19), date(2024, 12, 26), date(2025, 1, 2)],
+            )
+            self.assertEqual(
+                stats_charts.weekly_thursdays(date(2025, 1, 5), 3),
+                [date(2024, 12, 19), date(2024, 12, 26), date(2025, 1, 2)],
+            )
+            with self.assertRaises(ValueError):
+                stats_charts.weekly_thursdays(date(2025, 1, 2), 0)
+
+            add_score("2024-12-26", 1, "Alice", "Thursday Thirty", "#1", 1, -10.0, "10/30 (33%)")
+            add_score("2025-01-01", 1, "Alice", "Thursday Thirty", "#3", 1, -5.0, "5/30")
+            add_score("2025-01-02", 1, "Alice", "Thursday Thirty", "#4", 1, -30.0, "30/30 (100%)")
+            add_score("2025-01-02", 1, "Alice", "Thursday Thirty", "#5", 1, -29.0, "29/30 (97%)")
+            dates = stats_charts.weekly_thursdays(date(2025, 1, 2), 3)
+            results = stats_charts.load_scores_on_dates(1, "Thursday Thirty", dates)
+            self.assertEqual(results, [
+                score_missing(dates[0]),
+                scored(dates[1], 10, 30),
+                scored(dates[2], 29, 30),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Thursday Thirty", dates[0], dates[2])
+            self.assertEqual((resolved, variants), ("Thursday Thirty", []))
+
+            chart = stats_charts.render_scaled_score_chart(
+                results, 30, dates[0], dates[2], title="Thursday Thirty",
+                unit="correct", fixed_axis=True, expected_dates=dates,
+            )
+            lines = chart.splitlines()
+            self.assertEqual(lines[1], "Raw correct (higher = better)")
+            self.assertIn("30 │     ▉", lines[3])
+            self.assertIn(" 9 │   ▉", lines[10])
+            self.assertIn(" 3 │   ▉", lines[12])
+            self.assertNotIn(" 0 │", chart)
+            self.assertEqual(
+                stats_charts.summarize_scaled_scores(
+                    results, unit="correct", include_perfect=True,
+                ),
+                "Played: 2/3 days\nAvg: 19.5 correct\nBest: 29 correct\nPerfect: 0",
             )
         finally:
             cleanup(old_path, old_today, path)

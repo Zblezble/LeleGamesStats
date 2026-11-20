@@ -172,7 +172,15 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
                            *, public: bool = False):
     """Resolve, render and send one user's game history chart."""
     end = date.fromisoformat(today_str())
-    start = end - timedelta(days=period - 1)
+    selected_meta = None
+    if score_chart_family(selected_game) is not None:
+        selected_meta = stats_charts.score_chart_meta(selected_game)
+    weekly = bool(selected_meta and selected_meta.get("weekly"))
+    if weekly:
+        thursdays = stats_charts.weekly_thursdays(end, period)
+        start, end = thursdays[0], thursdays[-1]
+    else:
+        start = end - timedelta(days=period - 1)
     if (fixed_attempt_family(selected_game) is None
             and score_chart_family(selected_game) is None
             and guess_chart_family(selected_game) is None):
@@ -244,7 +252,13 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
             singular=meta["unit"].removesuffix("es"),
         )
     else:
-        daily_scores = stats_charts.load_scores(target.id, game, start, end)
+        meta = stats_charts.score_chart_meta(game)
+        if meta.get("weekly"):
+            daily_scores = stats_charts.load_scores_on_dates(
+                target.id, game, stats_charts.weekly_thursdays(end, period)
+            )
+        else:
+            daily_scores = stats_charts.load_scores(target.id, game, start, end)
         if not any(result.status != "missing" for result in daily_scores):
             await interaction.response.send_message(
                 f"No **{game}** results for {target.display_name} between "
@@ -273,11 +287,14 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
                 estimated=bool(meta.get("estimated")),
                 axis_suffix=meta.get("axis_suffix"),
                 axis_label=meta.get("axis_label"),
+                expected_dates=stats_charts.weekly_thursdays(end, period)
+                if meta.get("weekly") else None,
                 period=period,
             )
             summary = stats_charts.summarize_scaled_scores(
                 daily_scores, unit=meta["unit"], lower_is_better=lower_is_better,
                 include_hints=bool(meta.get("show_hints")),
+                include_perfect=bool(meta.get("weekly")),
                 estimated=bool(meta.get("estimated")),
             )
 
@@ -285,8 +302,9 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
         title=f"{get_game_icon(game)} {game} · {target.display_name}",
         color=0x64748B,
     )
+    period_noun = "Thursdays" if weekly else "days"
     embed.add_field(
-        name=f"Last {period} days",
+        name=f"Last {period} {period_noun}",
         value=f"```text\n{chart}\n```",
         inline=False,
     )
