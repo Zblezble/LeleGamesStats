@@ -193,6 +193,7 @@ def build_daily_embed(board_date: str, layout: str = "grid") -> discord.Embed:
 # The historical percentile engine owns difficulty computation. This module only
 # renders its results and never re-derives a local normalized difficulty scale.
 _DIFFICULTY_NOTE = "Higher percentile = easier than usual for the group."
+_CLOSING_FIELD_NAME = "Closing remark"
 
 
 def _median(values: Sequence[float]) -> float:
@@ -533,7 +534,9 @@ def build_wrap_embed(board_date: str) -> discord.Embed | None:
         )
 
         # Keep the existing date-seeded target and line variety as the sole punchline.
-        candidates = [*standings_fields, ("\u200b", _wrap_comment(board_date, names, standings), False)]
+        candidates = [*standings_fields,
+                      (_CLOSING_FIELD_NAME,
+                       _wrap_comment(board_date, names, standings), False)]
         _append_daily_fields(embed, candidates)
     else:
         solo_players = sorted({uname for entries in grouped.values()

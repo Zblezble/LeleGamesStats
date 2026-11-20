@@ -60,7 +60,7 @@ def field(embed, name):
 def assert_practice_day(embed, expected_names):
     names = [item.name for item in embed.fields]
     assert "Practice day" in names, names
-    assert "Final standings" not in names and "\u200b" not in names, names
+    assert "Final standings" not in names and embeds._CLOSING_FIELD_NAME not in names, names
     assert embed.fields[-1].name == "Practice day"
     value = field(embed, "Practice day")
     assert value.startswith("No points awarded."), value
@@ -105,10 +105,10 @@ def test_ordinary_standings_preserve_order_and_unfiltered_comment():
         )
 
         # One unchanged date-seeded comment, immediately after the standings.
-        assert embed.fields[-1].name == "\u200b"
+        assert embed.fields[-1].name == embeds._CLOSING_FIELD_NAME
         expected_comment = original_comment(day, expected_names, expected_standings)
         assert embed.fields[-1].value == expected_comment
-        assert sum(item.name == "\u200b" for item in embed.fields) == 1
+        assert sum(item.name == embeds._CLOSING_FIELD_NAME for item in embed.fields) == 1
     finally:
         embeds._wrap_comment = original_comment
         cleanup(old_path, old_prison, path)
@@ -221,7 +221,7 @@ def test_final_standings_keep_full_names_without_reel_fallbacks():
         assert f"{safe_tick} `2` pts · `1` game · `2.0` pts/game" in standings
         assert "Cara `1` pts · `1` game · `1.0` pts/game" in standings
         assert "Full names" not in {item.name for item in embed.fields}
-        assert embed.fields[-1].name == "\u200b"
+        assert embed.fields[-1].name == embeds._CLOSING_FIELD_NAME
     finally:
         cleanup(old_path, old_prison, path)
 
@@ -330,7 +330,7 @@ def test_daily_difficulty_uses_ordered_historical_percentiles_and_players():
         assert "normalized" not in verdict
         # Points and placement presentation stay intact around the new field.
         assert field(embed, "Final standings").startswith("Alice `3` pts")
-        assert embed.fields[-1].name == "\u200b"
+        assert embed.fields[-1].name == embeds._CLOSING_FIELD_NAME
     finally:
         embeds.difficulty.analyze_day = original_day
         cleanup(old_path, old_prison, path)
@@ -556,7 +556,7 @@ def test_long_standings_partition_complete_player_lines():
         ]
         assert actual_lines == expected_lines
         assert len(actual_lines) == len(set(actual_lines)) == 24
-        assert embed.fields[-1].name == "\u200b"
+        assert embed.fields[-1].name == embeds._CLOSING_FIELD_NAME
     finally:
         cleanup(old_path, old_prison, path)
 
@@ -729,8 +729,8 @@ def test_wrap_embed_has_exactly_one_deterministic_closing_field():
         assert [(item.name, item.value) for item in first.fields] == [
             (item.name, item.value) for item in second.fields
         ]
-        assert sum(item.name == "\u200b" for item in first.fields) == 1
-        assert first.fields[-1].name == "\u200b"
+        assert sum(item.name == embeds._CLOSING_FIELD_NAME for item in first.fields) == 1
+        assert first.fields[-1].name == embeds._CLOSING_FIELD_NAME
     finally:
         cleanup(old_path, old_prison, path)
 
