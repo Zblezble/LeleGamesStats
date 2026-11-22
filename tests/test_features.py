@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import config
+import commands
 import db
 import embeds
 import games
@@ -149,9 +150,48 @@ def test_named_regionle_special_keeps_base_game_policies():
     assert not games.is_first_try({**result, "solved": 0, "rank_score": 99.0})
 
 
+def test_all_time_stats_paginate_long_game_list():
+    """A long By-game section splits at row boundaries instead of truncating."""
+    old_path, path = fresh_db()
+    try:
+        game_count = 30
+        for index in range(game_count):
+            game = f"Long Game {index + 1:02d}"
+            add_score("2025-02-03", 1, "Alice", game, "#1", 1, 1.0,
+                      f"result {index + 1:02d}")
+
+        embed = commands.build_all_time_stats_embed(1, "Alice")
+        assert embed is not None
+        stat_fields = [
+            item for item in embed.fields
+            if item.name == "By game" or (item.name or "").startswith("By game (")
+        ]
+        assert len(stat_fields) > 1, [item.name for item in embed.fields]
+        assert [item.name for item in stat_fields] == [
+            f"By game ({page}/{len(stat_fields)})"
+            for page in range(1, len(stat_fields) + 1)
+        ]
+        assert all(len(item.value or "") <= 1024 for item in stat_fields)
+        assert len(embed) <= 6000
+
+        actual_lines = [
+            line for item in stat_fields for line in (item.value or "").splitlines()
+        ]
+        expected_lines = [
+            f"🧩 **Long Game {index:02d}** · 1 played · 100% solved · 0 🥇 · "
+            f"PB `result {index:02d}`"
+            for index in range(1, game_count + 1)
+        ]
+        assert actual_lines == expected_lines
+        assert not any("…" in (item.value or "") for item in stat_fields)
+    finally:
+        cleanup(old_path, path)
+
+
 if __name__ == "__main__":
     test_forfeit_requires_an_existing_entry()
     test_weekly_sums_daily_podiums_without_phantom_competition()
     test_ack_preserves_the_actual_result()
     test_named_regionle_special_keeps_base_game_policies()
+    test_all_time_stats_paginate_long_game_list()
     print("All feature tests passed.")

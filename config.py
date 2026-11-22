@@ -41,6 +41,11 @@ DIFFICULTY_MIN_DAILY_PLAYERS = 2
 DIFFICULTY_SHRINKAGE_STRENGTH = 3
 DIFFICULTY_MIN_WEEKLY_PUZZLES = 2
 
+# Personal performance trends use raw empirical percentiles (no shrinkage).
+GAME_TREND_DAILY_DAYS = 30
+GAME_TREND_WEEKLY_DAYS = 180
+GAME_TREND_MIN_RESULTS = 5
+
 
 def today_str() -> str:
     now = datetime.now(BOT_TZ) if BOT_TZ else datetime.now()

@@ -2,7 +2,9 @@
 import math
 import re
 import sqlite3
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from typing import Literal
 
 import config
 import games
@@ -191,3 +193,117 @@ def analyze_week(end_date: str, days: int = 7):
     return sorted(results, key=lambda item: (
         -item["percentile"], item["game"].casefold(), (item["variant"] or "").casefold()
     ))
+
+
+TrendStatus = Literal["improving", "declining", "stable", "insufficient"]
+
+
+@dataclass(frozen=True)
+class TrendResult:
+    """A player's recent performance change in historical percentile points."""
+
+    status: TrendStatus
+    previous_average: float | None
+    recent_average: float | None
+    change_pp: float | None
+    previous_count: int
+    recent_count: int
+    period_days: int
+
+
+def _trend_date(value: date | datetime | str) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return _day(value).date()
+
+
+def _classify_trend(change_pp: float) -> TrendStatus:
+    """Classify a raw percentage-point change using the documented thresholds."""
+    if change_pp >= 15:
+        return "improving"
+    if change_pp <= -15:
+        return "declining"
+    return "stable"
+
+
+def calculate_game_trend(user_id: int, game_key: str,
+                         end_date: date | datetime | str) -> TrendResult:
+    """Calculate one player's recent percentile trend without shrinkage.
+
+    Each submitted result is compared with the same game's historical baseline
+    strictly before that result's date. Results without usable history are
+    excluded. At least ``GAME_TREND_MIN_RESULTS`` usable results are required in
+    each half of the configured trend period.
+    """
+    if isinstance(user_id, bool) or not isinstance(user_id, int):
+        raise ValueError("Trend user_id must be an integer.")
+    if not isinstance(game_key, str) or not game_key.strip():
+        raise ValueError("Trend game_key must be a non-empty string.")
+    end = _trend_date(end_date)
+    family = games.score_chart_family(game_key)
+    chart_meta = games.SCORE_CHART_GAMES.get(family, {}) if family else {}
+    period_days = int(chart_meta.get("trend_period_days",
+                                     config.GAME_TREND_DAILY_DAYS))
+    if period_days < 2:
+        raise ValueError("Trend period must span at least two days.")
+
+    window_days = period_days // 2
+    start = end - timedelta(days=period_days - 1)
+    recent_start = end - timedelta(days=window_days - 1)
+    previous_end = recent_start - timedelta(days=1)
+
+    with sqlite3.connect(config.DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT board_date, puzzle_id, solved, rank_score, display_score"
+            " FROM scores WHERE user_id = ? AND game = ? COLLATE NOCASE"
+            " AND board_date BETWEEN ? AND ?"
+            " ORDER BY board_date ASC, puzzle_id ASC, timestamp ASC, id ASC",
+            (user_id, game_key, start.isoformat(), end.isoformat()),
+        ).fetchall()
+
+    previous_percentiles: list[float] = []
+    recent_percentiles: list[float] = []
+    for board_date, _puzzle_id, solved, stored_rank, display in rows:
+        try:
+            day = date.fromisoformat(board_date)
+        except (TypeError, ValueError):
+            continue
+        if day < start or day > end:
+            continue
+        rank = _rank(game_key, solved, stored_rank, display)
+        if rank is None:
+            continue
+        _base, _variant, measurement = _variant_of(game_key, display)
+        baseline = _history_for(day.isoformat(), game_key, measurement)
+        if baseline is None:
+            continue
+        percentile = empirical_percentile(rank, baseline)
+        if percentile is None:
+            continue
+        if start <= day <= previous_end:
+            previous_percentiles.append(percentile)
+        elif recent_start <= day <= end:
+            recent_percentiles.append(percentile)
+
+    minimum = config.GAME_TREND_MIN_RESULTS
+    if len(previous_percentiles) < minimum or len(recent_percentiles) < minimum:
+        return TrendResult(
+            status="insufficient", previous_average=None, recent_average=None,
+            change_pp=None, previous_count=len(previous_percentiles),
+            recent_count=len(recent_percentiles), period_days=period_days,
+        )
+
+    previous_average = sum(previous_percentiles) / len(previous_percentiles)
+    recent_average = sum(recent_percentiles) / len(recent_percentiles)
+    change_pp = recent_average - previous_average
+    return TrendResult(
+        status=_classify_trend(change_pp),
+        previous_average=previous_average,
+        recent_average=recent_average,
+        change_pp=change_pp,
+        previous_count=len(previous_percentiles),
+        recent_count=len(recent_percentiles),
+        period_days=period_days,
+    )

@@ -8,6 +8,7 @@ from discord import app_commands
 
 import config
 import db
+import difficulty
 import embeds
 import handlers
 import stats_charts
@@ -98,6 +99,25 @@ def _play_streaks(date_strings, today=None):
     return current, best_run
 
 
+def _format_game_trend(result: difficulty.TrendResult) -> str:
+    """Format a reusable TrendResult as a compact, mobile-friendly section."""
+    if (result.status == "insufficient" or result.previous_average is None
+            or result.recent_average is None or result.change_pp is None):
+        return "❔ Trend: Not enough data"
+    labels = {
+        "improving": ("📈", "Improving"),
+        "declining": ("📉", "Declining"),
+        "stable": ("➡️", "Stable"),
+    }
+    icon, label = labels[result.status]
+    change = f"{result.change_pp:+.0f} pp"
+    return (
+        f"{icon} Trend ({result.period_days} days): {label}\n"
+        f"Previous: {round(result.previous_average)} → "
+        f"Recent: {round(result.recent_average)} ({change})"
+    )
+
+
 def build_all_time_stats_embed(target_id: int, target_name: str) -> discord.Embed | None:
     """Build the existing all-time stats embed; None when no games are logged."""
     with sqlite3.connect(config.DB_PATH) as conn:
@@ -152,7 +172,9 @@ def build_all_time_stats_embed(target_id: int, target_name: str) -> discord.Embe
         pb = personal_bests.get(game, {}).get("display_score", "—")
         lines.append(f"{icon} **{game}** · {played} played · {win_rate}% solved · {crowns} 🥇 · PB `{pb}`")
 
-    embeds._append_daily_fields(embed, [("By game", "\n".join(lines), False)])
+    # Discord caps each field at 1024 characters. Split at complete game rows,
+    # so a long all-time history stays readable instead of ending in an ellipsis.
+    embeds._append_daily_fields(embed, embeds._checklist_fields("By game", lines))
     return embed
 
 
@@ -298,6 +320,7 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
                 estimated=bool(meta.get("estimated")),
             )
 
+    trend = difficulty.calculate_game_trend(target.id, game, today_str())
     embed = discord.Embed(
         title=f"{get_game_icon(game)} {game} · {target.display_name}",
         color=0x64748B,
@@ -311,6 +334,11 @@ async def _send_game_chart(interaction: discord.Interaction, target: discord.abc
     embed.add_field(
         name="Summary",
         value=summary,
+        inline=False,
+    )
+    embed.add_field(
+        name="Performance trend",
+        value=_format_game_trend(trend),
         inline=False,
     )
     await interaction.response.send_message(embed=embed, ephemeral=not public)

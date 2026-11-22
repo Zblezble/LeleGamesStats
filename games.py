@@ -97,6 +97,7 @@ SCORE_CHART_GAMES = {
     "Thursday Thirty": {
         "renderer": "scaled_score", "max_score": 30, "unit": "correct",
         "fixed_axis": True, "weekly": True,
+        "trend_period_days": config.GAME_TREND_WEEKLY_DAYS,
     },
     # ``max_score`` is Redactle's default axis, not a hard maximum. Successful
     # shares store raw guesses; DNFs never use their 10000+ sentinel.
