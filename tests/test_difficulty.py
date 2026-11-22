@@ -2,11 +2,13 @@
 import math
 import os
 import sqlite3
+import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import config

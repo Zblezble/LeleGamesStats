@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Focused regressions: weekly daily-podium summation and safe forfeits.
 
-Run: python -X utf8 test_features.py   (exits 1 on failure)
+Run: python -X utf8 tests/test_features.py   (exits 1 on failure)
 Every test uses a temporary SQLite file and explicit rows. Dates are far from
 today so the suite never touches scores.db or depends on the wall clock.
 """
@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import config

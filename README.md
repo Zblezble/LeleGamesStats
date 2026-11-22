@@ -70,7 +70,7 @@ embeds.py     → daily board + /missing checklist builders
 stats_charts.py → reusable game-history models, loaders, and chart renderers
 handlers.py   → on_message ingest flow + daily board maintenance
 commands.py   → slash commands, attached via register(bot)
-test_parsers.py → fixture suite: python test_parsers.py (run it before/after parser changes)
+tests/        → focused regression suites; run one with `python -X utf8 tests/test_parsers.py`
 ```
 
 ## Security note

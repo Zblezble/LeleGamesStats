@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Focused regressions for History in Order ranking, podiums and DB migration.
 
-Run: python -X utf8 test_history.py   (exits 1 on failure)
+Run: python -X utf8 tests/test_history.py   (exits 1 on failure)
 Every database test uses a temporary SQLite file and explicit dates, so the
 suite never reads or writes scores.db or the downloaded production database.
 """
@@ -13,7 +13,7 @@ import tempfile
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config  # noqa: E402
 import db  # noqa: E402
 import embeds  # noqa: E402

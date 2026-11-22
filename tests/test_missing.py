@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Focused regressions for /missing checklist partitioning.
 
-Run: python -X utf8 test_missing.py   (exits 1 on failure)
+Run: python -X utf8 tests/test_missing.py   (exits 1 on failure)
 Every case uses a throwaway SQLite file and temporarily injected game metadata,
 so the suite never touches scores.db and does not depend on the real registry
 (including another lane's Maptap or parser changes).
@@ -12,7 +12,7 @@ import sqlite3
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import config

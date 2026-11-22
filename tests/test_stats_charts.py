@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Focused regressions for the fixed-attempt game history chart.
 
-Run: python -X utf8 test_stats_charts.py   (exits 1 on failure)
+Run: python -X utf8 tests/test_stats_charts.py   (exits 1 on failure)
 Renderer cases are pure; command-data cases use a throwaway SQLite file.
 """
 import asyncio
@@ -14,7 +14,7 @@ import unittest
 from datetime import date
 from typing import Any, cast
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import config

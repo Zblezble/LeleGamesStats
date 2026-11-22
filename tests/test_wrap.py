@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Focused regressions for daily wrap standings, difficulty scores and quiet days.
 
-Run: python -X utf8 test_wrap.py   (exits 1 on failure)
+Run: python -X utf8 tests/test_wrap.py   (exits 1 on failure)
 All database cases use explicit rows in a temporary schema-aware SQLite file.
 """
 import os
@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
 import config

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Fixture-based regression tests for the game result parsers.
-Run: python test_parsers.py   (exits 1 on failure)
+Run: python -X utf8 tests/test_parsers.py   (exits 1 on failure)
 
 Each fixture is a REAL-world paste format we've seen in the channel, paired
 with the expected parse outcome. Add a fixture here when a format changes or
@@ -12,7 +12,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token")
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from parsers import parse_all_games  # noqa: E402
 
 # Maptap shares reused by both the compact cases and the explicit rank_score checks.
