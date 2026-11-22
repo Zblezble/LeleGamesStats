@@ -750,9 +750,9 @@ class AttemptModelTests(unittest.TestCase):
         old_path, old_today, path = fresh_db("2026-11-18")
         try:
             add_score("2026-11-15", 1, "Alice", "Farflung", "#49", 1,
-                      -230.0002, "230/500 km · best Rare")
+                      -230.0002, "230/500 (Rare)")
             add_score("2026-11-16", 1, "Alice", "Farflung", "#50", 1,
-                      -500.0004, "500/500 km · best Farflung")
+                      -500.0004, "500/500 (Farflung)")
             add_score("2026-11-17", 1, "Alice", "Farflung", "#51", 1,
                       -120.0, "120/500 km")
             results = stats_charts.load_scores(1, "Farflung", day(15), day(17))
@@ -775,8 +775,8 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("500 │   ▉", lines[3])
             self.assertIn("250 │ ▉ ▉", lines[8])
             self.assertIn("100 │ ▉ ▉ ▉", lines[11])
-            self.assertNotIn("best Rare", chart)
-            self.assertNotIn("best Farflung", chart)
+            self.assertNotIn("(Rare)", chart)
+            self.assertNotIn("(Farflung)", chart)
             self.assertEqual(
                 stats_charts.summarize_scaled_scores(results, unit="km"),
                 "Played: 3/3 days\nAvg: 283.3 km\nBest: 500 km",

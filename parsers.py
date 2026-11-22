@@ -551,9 +551,9 @@ def parse_all_games(text: str) -> list[dict]:
             )
             best_tip = FARFLUNG_RARITIES[best_index]
             tip_bonus = best_index / 10000.0
-        display = f"{km}/{edge_km} km"
+        display = f"{km}/{edge_km}"
         if best_tip:
-            display += f" · best {best_tip}"
+            display += f" ({best_tip})"
         results.append({
             "game": "Farflung",
             "puzzle_id": f"#{pid}",

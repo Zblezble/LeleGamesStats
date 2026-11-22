@@ -36,7 +36,10 @@ _SCORE_RATIO = re.compile(rf"^({_NUMBER_TEXT})\s*/\s*({_NUMBER_TEXT})")
 _SCORE_POINTS = re.compile(rf"^({_NUMBER_TEXT})\s*pts$", re.IGNORECASE)
 _REDACTLE_SCORE = re.compile(r"^(\d+)g(?:,\s*(\d+)h)?(?:\s*\(|$)", re.IGNORECASE)
 _ROUGHLY_GRID = re.compile(r"^~(\d+(?:\.\d+)?)%(?:\s*·|$)", re.IGNORECASE)
-_FARFLUNG_SCORE = re.compile(r"^(\d+)\s*/\s*(\d+)\s*km(?:\s*·\s*best\s+(\w+))?$", re.IGNORECASE)
+_FARFLUNG_SCORE = re.compile(
+    r"^(\d+)\s*/\s*(\d+)(?:\s*km)?(?:\s*·\s*best\s+(\w+))?(?:\s*\((\w+)\))?$",
+    re.IGNORECASE,
+)
 _GUESS_COUNT = re.compile(r"^(\d+)\s+guesses$", re.IGNORECASE)
 _TRAVEL_SCORE = re.compile(r"^\s*([+-]?\d+)(?:\s*\(([^)]*)\))?")
 _TRAVEL_HINT = re.compile(r"(?:^|\s)(?:(\d+)\s*(?:rady?|hints?)|\?)", re.IGNORECASE)
