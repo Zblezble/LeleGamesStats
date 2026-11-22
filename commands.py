@@ -515,13 +515,16 @@ async def undo(interaction: discord.Interaction):
 
 async def games(interaction: discord.Interaction):
     lines = []
-    for name, meta in ACTIVE_GAME_META.items():
+    active_games = sorted(ACTIVE_GAME_META.items(), key=lambda item: item[0].casefold())
+    for name, meta in active_games:
         lines.append(f"{meta['icon']} **{name}** · {meta['desc']} · [play]({meta['url']})")
 
     embed = discord.Embed(
         title=f"Supported games · {len(ACTIVE_GAME_META)}",
         # description allows 4096 chars; a single field would cap at 1024
-        description="\n".join(lines) + "\n\nAll games reset at midnight, your local time.",
+        description="\n".join(lines)
+        + "\n\nAll games reset at midnight, your local time. "
+        "Redactle resets at 17:00.",
         color=0x64748B
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)

@@ -93,18 +93,18 @@ def add_played(game, display_score, user_id=1):
 
 
 def to_play_lines(games, played):
+    names = sorted((name for name in games if name not in played), key=str.casefold)
     return [
-        f"{meta['icon']} **{name}** · [play]({meta['url']})"
-        for name, meta in games.items()
-        if name not in played
+        f"{games[name]['icon']} **{name}** · [play]({games[name]['url']})"
+        for name in names
     ]
 
 
 def done_lines(games, played):
+    names = sorted(played, key=str.casefold)
     return [
         f"{games[name]['icon']} **{name}** · {played[name]}"
-        for name in games
-        if name in played
+        for name in names
     ]
 
 
@@ -162,6 +162,32 @@ def test_short_checklist_keeps_original_single_fields():
         assert_single_field(embed, "To play · 2", to_play_lines(REAL_GAMES, played))
         assert_single_field(embed, "Done · 1", done_lines(REAL_GAMES, played))
         assert embed.description is None
+    finally:
+        restore_fixture(saved)
+        cleanup(old_path, old_today, path)
+
+
+def test_missing_lists_are_alphabetical():
+    """Checklist order follows names, not the registry's insertion order."""
+    old_path, old_today, path = fresh_db()
+    # Deliberately reverse the three familiar registry names.
+    games = dict(reversed(list(REAL_GAMES.items())))
+    saved = install_fixture(games)
+    try:
+        add_played("Worldle", "4/6")
+        embed = embeds.build_missing_embed(1)
+        assert_single_field(
+            embed,
+            "To play · 2",
+            [
+                f"{games['Maptap']['icon']} **Maptap** · [play]({games['Maptap']['url']})",
+                f"{games['Wordle']['icon']} **Wordle** · [play]({games['Wordle']['url']})",
+            ],
+        )
+        assert_single_field(embed, "Done · 1", [
+            f"{games['Worldle']['icon']} **Worldle** · 4/6",
+        ])
+        assert_discord_limits(embed)
     finally:
         restore_fixture(saved)
         cleanup(old_path, old_today, path)
@@ -255,6 +281,7 @@ def test_long_done_list_partitions_and_keeps_scores():
 
 if __name__ == "__main__":
     test_short_checklist_keeps_original_single_fields()
+    test_missing_lists_are_alphabetical()
     test_empty_and_complete_states_stay_honest()
     test_long_to_play_list_partitions_and_keeps_maptap()
     test_long_done_list_partitions_and_keeps_scores()

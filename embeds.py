@@ -692,10 +692,17 @@ def build_missing_embed(user_id: int) -> discord.Embed:
 
     candidates = []
     if missing:
-        lines = [f"{meta['icon']} **{name}** · [play]({meta['url']})" for name, meta in ACTIVE_GAME_META.items() if name in missing]
+        missing_names = sorted(missing, key=str.casefold)
+        lines = [
+            f"{ACTIVE_GAME_META[name]['icon']} **{name}**"
+            f" · [play]({ACTIVE_GAME_META[name]['url']})"
+            for name in missing_names
+        ]
         candidates.extend(_checklist_fields(f"To play · {len(missing)}", lines))
     if played:
-        lines = [f"{ACTIVE_GAME_META[name]['icon']} **{name}** · {played[name]}" for name in ACTIVE_GAME_META if name in played]
+        played_names = sorted(played, key=str.casefold)
+        lines = [f"{ACTIVE_GAME_META[name]['icon']} **{name}** · {played[name]}"
+                 for name in played_names]
         candidates.extend(_checklist_fields(f"Done · {len(played)}", lines))
     # One call keeps both sections inside the same field-count/total-size budget.
     _append_daily_fields(embed, candidates)

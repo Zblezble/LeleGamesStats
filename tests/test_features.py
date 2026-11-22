@@ -5,6 +5,7 @@ Run: python -X utf8 tests/test_features.py   (exits 1 on failure)
 Every test uses a temporary SQLite file and explicit rows. Dates are far from
 today so the suite never touches scores.db or depends on the wall clock.
 """
+import asyncio
 import os
 import sqlite3
 import sys
@@ -150,6 +151,44 @@ def test_named_regionle_special_keeps_base_game_policies():
     assert not games.is_first_try({**result, "solved": 0, "rank_score": 99.0})
 
 
+def test_games_command_lists_games_alphabetically():
+    """The /games description follows names, not registry insertion order."""
+    fixture = {
+        "Worldle": {"icon": "🗺️", "desc": "geo puzzle", "url": "https://worldle.example"},
+        "alpha": {"icon": "🧩", "desc": "alpha puzzle", "url": "https://alpha.example"},
+        "Maptap": {"icon": "🗺️", "desc": "map puzzle", "url": "https://maptap.example"},
+    }
+    old_meta = commands.ACTIVE_GAME_META
+
+    class FakeResponse:
+        def __init__(self):
+            self.embed = None
+
+        async def send_message(self, embed=None, ephemeral=None):
+            self.embed = embed
+            self.ephemeral = ephemeral
+
+    class FakeInteraction:
+        def __init__(self):
+            self.response = FakeResponse()
+
+    try:
+        commands.ACTIVE_GAME_META = fixture
+        interaction = FakeInteraction()
+        asyncio.run(commands.games(interaction))
+        assert interaction.response.ephemeral is True
+        assert interaction.response.embed is not None
+        description = interaction.response.embed.description or ""
+        lines = description.split("\n\nAll games reset", 1)[0].splitlines()
+        names = [line.split("**", 2)[1] for line in lines]
+        assert names == ["alpha", "Maptap", "Worldle"], names
+        assert description.endswith(
+            "All games reset at midnight, your local time. Redactle resets at 17:00."
+        )
+    finally:
+        commands.ACTIVE_GAME_META = old_meta
+
+
 def test_all_time_stats_paginate_long_game_list():
     """A long By-game section splits at row boundaries instead of truncating."""
     old_path, path = fresh_db()
@@ -193,5 +232,6 @@ if __name__ == "__main__":
     test_weekly_sums_daily_podiums_without_phantom_competition()
     test_ack_preserves_the_actual_result()
     test_named_regionle_special_keeps_base_game_policies()
+    test_games_command_lists_games_alphabetically()
     test_all_time_stats_paginate_long_game_list()
     print("All feature tests passed.")
