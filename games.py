@@ -26,6 +26,7 @@ GAME_META = {
     "Tradle": {"icon": "🚢", "desc": "guess which country exports the goods", "url": "https://tradle.net/"},
     "Chessle": {"icon": "♞", "desc": "solve a chess position in six attempts", "url": "https://wordle.global/en/chessle"},
     "Maptap": {"icon": "📍", "desc": "daily geography puzzle", "url": "https://maptap.gg/"},
+    "Farflung": {"icon": "🛰️", "desc": "daily five-pin geography expedition", "url": "https://farflung.game/"},
 }
 
 
@@ -109,6 +110,11 @@ SCORE_CHART_GAMES = {
         "renderer": "scaled_score", "max_score": 100, "unit": "%",
         "fixed_axis": True, "estimated": True, "axis_suffix": "%",
         "axis_label": "Estimated grid average (higher = better)",
+    },
+    # Farflung distance is primary; the best rarity is only a tiny rank tiebreak.
+    "Farflung": {
+        "renderer": "scaled_score", "max_score": 500, "unit": "km",
+        "fixed_axis": True, "axis_label": "Distance (higher = better)",
     },
 }
 

@@ -262,6 +262,23 @@ CASES = [
      [("Roughly (Where from)", "#306", 1, "Top 3% (97%)"),
       ("Roughly (Where from)", "#307", 1, "~92% · best 24%")]),
 
+    ("farflung with rarity tips",
+     "Farflung #49 · 230/500 kmCommon · Common · Common · Common · Rare\n"
+     "https://farflung.game/s/fpfcf2?e=49",
+     [("Farflung", "#49", 1, "230/500 km · best Rare")]),
+    ("farflung best rarity is Farflung",
+     "Farflung Expedition #50 · 500/500 km · Common · Uncommon · Rare · Elusive · Farflung",
+     [("Farflung", "#50", 1, "500/500 km · best Farflung")]),
+    ("farflung without rarity labels",
+     "Farflung #51 · 120/500 km",
+     [("Farflung", "#51", 1, "120/500 km")]),
+    ("farflung miss is not the best tip",
+     "Farflung #52 · 230/500 kmCommon · Miss · Common · Rare · Elusive",
+     [("Farflung", "#52", 1, "230/500 km · best Elusive")]),
+    ("farflung all misses still complete at zero km",
+     "Farflung #53 · 0/500 kmMiss · Miss · Miss · Miss · Miss",
+     [("Farflung", "#53", 1, "0/500 km")]),
+
     # --- Negatives: must NOT match ---
     ("banter about wordle", "did you play wordle today?", []),
     ("banter about globle", "this globle is impossible", []),
@@ -291,6 +308,14 @@ RANK_CASES = [
     ("magnitudle current serial header ranks higher points better",
      "Size It Up\n#98\nScore: 230/500",
      [("Magnitudle (Size It Up)", "#98", 1, -230.0, "230/500")]),
+    ("farflung ranks distance higher-is-better with rarity tiebreak",
+     "Farflung #49 · 230/500 kmCommon · Common · Common · Common · Rare\n"
+     "https://farflung.game/s/fpfcf2?e=49",
+     [("Farflung", "#49", 1, -230.0002, "230/500 km · best Rare")]),
+    ("farflung same distance ranks best rarity better",
+     "Farflung #52 · 140/500 km · Common · Uncommon · Rare · Elusive · Farflung\n"
+     "https://farflung.game/s/example?e=52",
+     [("Farflung", "#52", 1, -140.0004, "140/500 km · best Farflung")]),
 ]
 
 

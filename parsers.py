@@ -5,6 +5,13 @@ import re
 
 import config
 
+# Farflung rarity names, from least to most valuable. A miss is a valid pin
+# result worth zero km, but is never the "best tip". The index only provides a
+# tiny same-distance leaderboard tiebreak; the chart uses kilometers directly.
+FARFLUNG_RARITIES = ("Common", "Uncommon", "Rare", "Elusive", "Farflung")
+FARFLUNG_MISS = "Miss"
+_FARFLUNG_TIP_PATTERN = "|".join((FARFLUNG_MISS, *FARFLUNG_RARITIES))
+
 
 def parse_all_games(text: str) -> list[dict]:
     results = []
@@ -514,6 +521,45 @@ def parse_all_games(text: str) -> list[dict]:
             "solved": 1,  # A published final score is a completed run, including 0.
             "rank_score": float(-pts),  # Higher final score = lower rank_score.
             "display_score": f"{pts_text} pts",
+            "extra_url": None
+        })
+
+    # 22. FARFLUNG (Farflung #49 · 230/500 kmCommon · ... · Rare). Kilometers
+    # are the authoritative score. Rarity labels are retained as the best valid
+    # tip and provide a small same-distance rank tiebreak only. A Miss is a
+    # valid zero-distance pin and never counts as the best tip.
+    for m in re.finditer(
+        rf"Farflung\s+(?:Expedition\s+)?#(\d+)\s*·\s*(\d+)\s*/\s*(\d+)\s*km"
+        rf"(?:\s*(?:·\s*)?((?:{_FARFLUNG_TIP_PATTERN})"
+        rf"(?:\s*·\s*(?:{_FARFLUNG_TIP_PATTERN})){{4}}))?",
+        text, re.IGNORECASE
+    ):
+        pid, km_text, edge_text, tips_text = (
+            m.group(1), m.group(2), m.group(3), m.group(4)
+        )
+        km, edge_km = int(km_text), int(edge_text)
+        tips = re.findall(_FARFLUNG_TIP_PATTERN, tips_text or "", re.IGNORECASE)
+        valid_tips = [tip for tip in tips
+                      if tip.casefold() != FARFLUNG_MISS.casefold()]
+        best_tip = ""
+        tip_bonus = 0.0
+        if valid_tips:
+            best_index = max(
+                next(i for i, name in enumerate(FARFLUNG_RARITIES)
+                     if name.casefold() == tip.casefold())
+                for tip in valid_tips
+            )
+            best_tip = FARFLUNG_RARITIES[best_index]
+            tip_bonus = best_index / 10000.0
+        display = f"{km}/{edge_km} km"
+        if best_tip:
+            display += f" · best {best_tip}"
+        results.append({
+            "game": "Farflung",
+            "puzzle_id": f"#{pid}",
+            "solved": 1,
+            "rank_score": float(-km - tip_bonus),
+            "display_score": display,
             "extra_url": None
         })
 

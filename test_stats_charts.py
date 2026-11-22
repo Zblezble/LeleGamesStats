@@ -337,6 +337,7 @@ class AttemptModelTests(unittest.TestCase):
             self.assertIn("Redactle", values)
             self.assertIn("Songless", values)
             self.assertIn("Roughly (Where from)", values)
+            self.assertIn("Farflung", values)
             self.assertIn("Thursday Thirty", values)
             self.assertNotIn("Roughly (How big)", values)
             self.assertNotIn("Chessle (Medium)", values)
@@ -518,6 +519,7 @@ class AttemptModelTests(unittest.TestCase):
             "Maptap": "scaled_score",
             "Redactle": "scaled_score",
             "Roughly (Where from)": "scaled_score",
+            "Farflung": "scaled_score",
             "Thursday Thirty": "scaled_score",
         }
         self.assertEqual(
@@ -548,6 +550,10 @@ class AttemptModelTests(unittest.TestCase):
         self.assertTrue(
             stats_charts.score_chart_meta("Thursday Thirty").get("weekly"))
         self.assertIsNone(games.score_chart_family("Roughly (How big)"))
+        self.assertEqual(
+            stats_charts.score_chart_meta("Farflung")["max_score"], 500)
+        self.assertTrue(
+            stats_charts.score_chart_meta("Farflung").get("fixed_axis"))
 
     def test_score_states_are_validated(self):
         scored(day(1), 0, 12)
@@ -736,6 +742,44 @@ class AttemptModelTests(unittest.TestCase):
             self.assertEqual(
                 stats_charts.summarize_fixed_scores(results, 5),
                 "Played: 3/4 days\nAvg: 2.5/5\nBest: 5/5\nPerfect: 1",
+            )
+        finally:
+            cleanup(old_path, old_today, path)
+
+    def test_farflung_uses_distance_and_ignores_rarity_height(self):
+        old_path, old_today, path = fresh_db("2026-11-18")
+        try:
+            add_score("2026-11-15", 1, "Alice", "Farflung", "#49", 1,
+                      -230.0002, "230/500 km · best Rare")
+            add_score("2026-11-16", 1, "Alice", "Farflung", "#50", 1,
+                      -500.0004, "500/500 km · best Farflung")
+            add_score("2026-11-17", 1, "Alice", "Farflung", "#51", 1,
+                      -120.0, "120/500 km")
+            results = stats_charts.load_scores(1, "Farflung", day(15), day(17))
+            self.assertEqual(results, [
+                scored(day(15), 230, 500),
+                scored(day(16), 500, 500),
+                scored(day(17), 120, 500),
+            ])
+            resolved, variants = stats_charts.resolve_chart_game(
+                1, "Farflung", day(15), day(17))
+            self.assertEqual((resolved, variants), ("Farflung", []))
+
+            chart = stats_charts.render_scaled_score_chart(
+                results, 500, day(15), day(17), title="Farflung",
+                unit="km", fixed_axis=True,
+                axis_label="Distance (higher = better)",
+            )
+            lines = chart.splitlines()
+            self.assertEqual(lines[1], "Distance (higher = better)")
+            self.assertIn("500 │   ▉", lines[3])
+            self.assertIn("250 │ ▉ ▉", lines[8])
+            self.assertIn("100 │ ▉ ▉ ▉", lines[11])
+            self.assertNotIn("best Rare", chart)
+            self.assertNotIn("best Farflung", chart)
+            self.assertEqual(
+                stats_charts.summarize_scaled_scores(results, unit="km"),
+                "Played: 3/3 days\nAvg: 283.3 km\nBest: 500 km",
             )
         finally:
             cleanup(old_path, old_today, path)

@@ -36,6 +36,7 @@ _SCORE_RATIO = re.compile(rf"^({_NUMBER_TEXT})\s*/\s*({_NUMBER_TEXT})")
 _SCORE_POINTS = re.compile(rf"^({_NUMBER_TEXT})\s*pts$", re.IGNORECASE)
 _REDACTLE_SCORE = re.compile(r"^(\d+)g(?:,\s*(\d+)h)?(?:\s*\(|$)", re.IGNORECASE)
 _ROUGHLY_GRID = re.compile(r"^~(\d+(?:\.\d+)?)%(?:\s*·|$)", re.IGNORECASE)
+_FARFLUNG_SCORE = re.compile(r"^(\d+)\s*/\s*(\d+)\s*km(?:\s*·\s*best\s+(\w+))?$", re.IGNORECASE)
 _GUESS_COUNT = re.compile(r"^(\d+)\s+guesses$", re.IGNORECASE)
 _TRAVEL_SCORE = re.compile(r"^\s*([+-]?\d+)(?:\s*\(([^)]*)\))?")
 _TRAVEL_HINT = re.compile(r"(?:^|\s)(?:(\d+)\s*(?:rady?|hints?)|\?)", re.IGNORECASE)
@@ -333,6 +334,17 @@ def _score_from_row(day: date, solved: object, display_score: str | None,
             if meta.get("max_score") is not None and maximum > meta["max_score"]:
                 return None
             return DailyScore(day, "score", score, maximum)
+        return None
+
+    if games.score_chart_family(game_name) == "Farflung":
+        if solved == 0:
+            return DailyScore(day, "dnf", None, None, None)
+        match = _FARFLUNG_SCORE.match(display)
+        if not match:
+            return None
+        score, maximum = int(match.group(1)), int(match.group(2))
+        if maximum > 0 and 0 <= score <= maximum:
+            return DailyScore(day, "score", score, maximum, None)
         return None
 
     if games.score_chart_family(game_name) == "Roughly (Where from)":
