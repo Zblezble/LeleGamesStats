@@ -60,6 +60,7 @@ In the table below, **lower rank_score wins**. The table describes the stored le
 | **Tradle** | `tries` | Fewer tries wins. DNF is 99. |
 | **Chessle** | `attempts + 0.000001 × seconds` | Attempts dominate, elapsed time is a small tiebreak. The level (e.g. Medium) is preserved in the game name. |
 | **Maptap** | `-final score` | The published **final score** is the only authoritative result; higher is better. The preceding emoji-annotated values are not summed. A completed share with a final score of 0 is still a finished result, not a DNF, and participates in difficulty when it has enough history. |
+| **Farflung** | `−(distance km + best valid rarity index / 10000)` | Distance is the primary score and higher kilometers are better. The best valid rarity is a tiny same-distance tiebreak; rarity order is `Common`, `Uncommon`, `Rare`, `Elusive`, `Farflung`. `Miss` is a valid zero-distance pin and is never treated as the best tip. A completed `0/500` is a finished result, not a DNF. |
 
 A compact summary of the typical guess-style games is: **fewer guesses / attempts wins**; the exact failure fallback varies by game (99, 999, or 10000).
 
@@ -139,6 +140,6 @@ Difficulty is calculated on demand from the canonical stored attempt for each `(
 
 ## Optional prison mode
 
-Set `PRISON_ENABLED=1` to enable it. Currently, eligible games are **Globle, Metazooa, and Regionle** (not Flagle or Travle). A first-attempt win on those games confiscates the player’s daily points, but preserves the actual game result and placement. The sentence is announced once per player per day, and resets with the next day.
+Set `PRISON_ENABLED=1` to enable it. Currently, eligible games are **Globle, Regionle, Metazooa, and Redactle** (not Flagle or Travle). A first-attempt win on those games confiscates the player’s daily points, but preserves the actual game result and placement. The sentence is announced once per player per day, and resets with the next day.
 
 For visibility and transparency, `/stats` includes **lifetime prison days**. Daily and weekly wraps also show jailed players for that period when there are offenders.
