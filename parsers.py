@@ -50,13 +50,16 @@ def parse_all_games(text: str) -> list[dict]:
         })
 
     # 3. REDACTLE (Redactle #1670 — stats may be on the same line or the next one;
-    # hint cost is 10 guesses per 👆 and 100 guesses per 💬)
+    # hint cost is 10 guesses per 👆 and 100 guesses per 💬. Shares may start
+    # with either I or We.)
     for m in re.finditer(
-        r"I (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guess(?:es)?[.!]([^\n]*)(?:\n([^\n]+))?",
+        r"(?:I|We) (cracked|gave up on) Redactle #(\d+) (?:in|after) (\d+) guess(?:es)?\b([^\n]*)(?:\n([^\n]+))?",
         text
     ):
         status, pid, guesses = m.group(1), m.group(2), int(m.group(3))
-        stats_line = m.group(4) or m.group(5) or ""
+        # A next-line stats block is preferred over the punctuation-only tail
+        # captured from the share sentence.
+        stats_line = m.group(5) or m.group(4) or ""
         solved = 1 if status == "cracked" else 0
         arrow_hints, chat_hints = 0, 0
         h_match = re.search(r"Hints👆(\d+),\s*💬(\d+)", stats_line)

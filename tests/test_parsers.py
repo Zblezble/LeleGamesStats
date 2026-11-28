@@ -86,6 +86,15 @@ CASES = [
     ("redactle gave up",
      "I gave up on Redactle #1670 after 55 guesses.\n⏱️ 12m03s",
      [("Redactle", "#1670", 0, "DNF (55g)")]),
+    ("redactle shared-player solved",
+     "We cracked Redactle #1696 in 166 guesses with 1 other player!"
+     "🎲 166 | 🔥 0 | Avg 69.88 | Hints👆1, 💬0 | ⏱️ 29m35s\n\n"
+     "https://redactle.net/en/g/wQn4cPJ",
+     [("Redactle", "#1696", 1, "166g, 1h (29m35s)")]),
+    ("redactle shared-player gave up",
+     "We gave up on Redactle #1697 after 72 guesses with 2 other players."
+     "🎲 72 | 🔥 0 | Avg 88.12 | Hints👆0, 💬0 | ⏱️ 41m02s",
+     [("Redactle", "#1697", 0, "DNF (72g)")]),
 
     # --- Flagle ---
     ("flagle solved",
